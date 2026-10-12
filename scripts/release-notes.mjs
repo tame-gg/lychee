@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Builds a GitHub Release from the files in dist/, so the Releases page describes each file the
-// same way the download page does (both use docs/downloads.js).
+// same way the download page does (both use release/downloads.js).
 //
 //   node scripts/release-notes.mjs v1.0.0-rc.8              the release body: the version's
-//                                                          docs/changelog.js entry, then the
+//                                                          release/changelog.js entry, then the
 //                                                          downloads table
 //   node scripts/release-notes.mjs v1.0.0-rc.8 --files      the files to upload, one per line
 //   node scripts/release-notes.mjs v1.0.0-rc.8 --changelog  just the changelog entry; fails when
@@ -17,8 +17,8 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const { LycheeDownloads: downloads } = require('../docs/downloads.js')
-const { LycheeChangelog: changelog } = require('../docs/changelog.js')
+const { LycheeDownloads: downloads } = require('../release/downloads.js')
+const { LycheeChangelog: changelog } = require('../release/changelog.js')
 
 const REPO = 'tame-gg/lychee'
 const SITE = 'https://tame.gg/projects/lychee/'
@@ -32,7 +32,7 @@ if (!tag || !/^v\d/.test(tag)) {
 const KIND = { new: 'New', faster: 'Faster', improved: 'Improved', fixed: 'Fixed' }
 const entry = changelog.find((candidate) => candidate.version === tag)
 if (!entry) {
-  console.error(`No ${tag} entry in docs/changelog.js — add one, then tag again.`)
+  console.error(`No ${tag} entry in release/changelog.js — add one, then tag again.`)
   process.exit(1)
 }
 const whatsNew =

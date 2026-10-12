@@ -58,13 +58,13 @@ Tests build the app first; set `LYCHEE_E2E_SKIP_BUILD=1` when `out/` is already 
 
 ## Releasing
 
-A release ships seven files: `Lychee` for macOS (Apple silicon and Intel `.dmg`), Windows (one installer for x64 and ARM64) and Linux (`AppImage` and `.deb`, x86_64 and ARM64). The download page (`docs/`, served by GitHub Pages) reads them from the latest GitHub Release and labels each one from its file name (`docs/downloads.js`), so keep the naming in `electron-builder.yml` intact.
+A release ships seven files: `Lychee` for macOS (Apple silicon and Intel `.dmg`), Windows (one installer for x64 and ARM64) and Linux (`AppImage` and `.deb`, x86_64 and ARM64). The download links on [tame.gg/projects/lychee](https://tame.gg/projects/lychee) point at the latest GitHub Release, and the release notes label each file from its name (`release/downloads.js`), so keep the naming in `electron-builder.yml` intact.
 
-First bump the version and add its entry at the top of `docs/changelog.js`, in one PR. The entry becomes the release notes, and a tag without one stops before building.
+First bump the version and add its entry at the top of `release/changelog.js`, in one PR. The entry becomes the release notes, and a tag without one stops before building.
 
 ```bash
 npm version <version> --no-git-tag-version     # e.g. 1.0.0-rc.16
-# add the v<version> entry to docs/changelog.js, open the PR, merge it
+# add the v<version> entry to release/changelog.js, open the PR, merge it
 git checkout main && git pull
 git tag v<version> && git push origin v<version>
 ```

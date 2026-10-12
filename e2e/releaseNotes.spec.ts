@@ -32,21 +32,21 @@ function writeChannelFiles(root: string, version: string, names = channelFiles):
   }
 }
 
-/** A changelog with one entry for each of `versions`, in docs/changelog.js's shape. */
+/** A changelog with one entry for each of `versions`, in release/changelog.js's shape. */
 function writeChangelog(root: string, versions: string[]): void {
   const entries = versions.map((version) => ({
     version: `v${version}`,
     items: [{ kind: 'fixed', title: 'Fixes', text: `What changed in ${version}.` }]
   }))
   writeFileSync(
-    join(root, 'docs/changelog.js'),
+    join(root, 'release/changelog.js'),
     `module.exports.LycheeChangelog = ${JSON.stringify(entries)}\n`
   )
 }
 
 function prepareRelease(root: string, files: string[]): string {
-  for (const dir of ['scripts', 'docs', 'dist']) mkdirSync(join(root, dir), { recursive: true })
-  for (const file of ['scripts/release-notes.mjs', 'docs/downloads.js']) {
+  for (const dir of ['scripts', 'release', 'dist']) mkdirSync(join(root, dir), { recursive: true })
+  for (const file of ['scripts/release-notes.mjs', 'release/downloads.js']) {
     copyFileSync(resolve(__dirname, '..', file), join(root, file))
   }
   writeChangelog(root, ['1.0.0-rc.1', '1.0.0', '1.0.0-rc.11+build.1'])
@@ -112,7 +112,7 @@ test.describe('release artifact selection @smoke', () => {
       expect(result).toMatchObject({
         status: 1,
         stdout: '',
-        stderr: expect.stringContaining('No v1.0.0-rc.2 entry in docs/changelog.js')
+        stderr: expect.stringContaining('No v1.0.0-rc.2 entry in release/changelog.js')
       })
     }
   })
