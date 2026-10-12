@@ -6,7 +6,7 @@
 # it stays: unchecked deletes it, checked recreates it if an earlier install left it missing.
 # Silent installs and auto-updates skip this page and keep the default behaviour.
 !macro customFinishPage
-  # Same "Run Plexo" checkbox as the default finish page.
+  # Same "Run Lychee" checkbox as the default finish page.
   !ifndef HIDE_RUN_AFTER_FINISH
     Function StartApp
       ${if} ${isUpdated}

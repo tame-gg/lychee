@@ -1,13 +1,18 @@
-/* The app's tokens (src/renderer/src/assets/main.css), so the extension looks like Plexo. */
+/* The app's tokens (src/renderer/src/assets/main.css), so the extension looks like Lychee. */
 @font-face {
-  font-family: 'Manrope';
-  font-weight: 400 700;
-  src: url('fonts/Manrope-Variable.woff2') format('woff2');
+  font-family: 'JetBrains Mono';
+  font-weight: 400;
+  src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
 }
 @font-face {
-  font-family: 'Roboto Mono';
-  font-weight: 400 600;
-  src: url('fonts/RobotoMono-Variable.woff2') format('woff2');
+  font-family: 'JetBrains Mono';
+  font-weight: 500 700;
+  src: url('fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-weight: 400;
+  src: url('fonts/InstrumentSerif-Regular.woff2') format('woff2');
 }
 
 :root {
@@ -20,31 +25,35 @@
   --text3: #737377;
   --border: #e0e0e2;
   --strong: #b9b9bb;
+  --hover: #f0f0f0;
+  --surface: linear-gradient(180deg, #ffffff 0%, #f7f7f8 100%);
   --on: #1f8a70;
-  /* Darker than the app's #d97706, so white text on it reads at WCAG AA. */
-  --accent: #b45309;
+  --accent: #946a12;
   --accent-on: #ffffff;
   --warn: #92400e;
   --warn-bg: #fef3c7;
   --warn-border: #fde68a;
-  --mono: 'Roboto Mono', ui-monospace, Menlo, monospace;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  --serif: 'Instrument Serif', Georgia, serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1b1e20;
-    --bg2: #202325;
-    --input: #242729;
-    --text: #eae7e2;
-    --text2: #a9adb2;
-    --text3: #8d9196;
-    --border: #2b2f33;
-    --strong: #3a3f44;
-    --on: #4ea89a;
-    --accent: #d8a44c;
-    --accent-on: #1b1408;
-    --warn: #e8bb6d;
-    --warn-bg: #33291a;
-    --warn-border: #54421f;
+    --bg: #0a0a0a;
+    --bg2: #121212;
+    --input: #070707;
+    --text: #f2f2f2;
+    --text2: #9e9e9e;
+    --text3: #8a8a8a;
+    --border: #1e1e1e;
+    --strong: #2c2c2c;
+    --hover: #202020;
+    --surface: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+    --on: #3fc79f;
+    --accent: #e8b84a;
+    --accent-on: #0a0a0a;
+    --warn: #eebb72;
+    --warn-bg: #2c2419;
+    --warn-border: #574224;
   }
 }
 
@@ -56,10 +65,13 @@ body {
   background: var(--bg);
   color: var(--text);
   font:
-    13px/1.45 Manrope,
+    13px/1.45 system-ui,
     -apple-system,
-    'Helvetica Neue',
+    Inter,
+    'SF Pro Text',
+    'Segoe UI',
     sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 [hidden] {
   display: none !important;
@@ -155,14 +167,21 @@ button {
   height: 32px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 0.5px solid var(--border);
-  background: var(--bg2);
+  border: 1px solid var(--strong);
+  background: var(--bg2) var(--surface);
   color: var(--text);
   cursor: pointer;
+  transition: background-color 80ms linear;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+button:hover {
+  background-color: var(--hover);
+}
+button:active {
+  transform: translateY(0.5px);
 }
 button.primary {
   border: none;
@@ -170,10 +189,17 @@ button.primary {
   color: var(--accent-on);
   font-weight: 600;
 }
+button.primary:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--text));
+}
 button.ghost {
   border: none;
   background: transparent;
   color: var(--text2);
+}
+button.ghost:hover {
+  background: var(--hover);
+  color: var(--text);
 }
 
 input[type='text'],
@@ -182,7 +208,7 @@ input[type='number'] {
   height: 32px;
   padding: 0 10px;
   border-radius: 8px;
-  border: 0.5px solid var(--strong);
+  border: 1px solid var(--strong);
   background: var(--input);
   color: var(--text);
 }

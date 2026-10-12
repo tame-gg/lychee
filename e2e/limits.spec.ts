@@ -12,65 +12,65 @@ import { named, Swarm, torrentFileOnDisk } from './torrentSwarm'
 const KB = 1024
 
 test.describe('speed and data limits', () => {
-  test('a total speed limit holds a download to it', async ({ plexo, serve }) => {
+  test('a total speed limit holds a download to it', async ({ lychee, serve }) => {
     const origin = await serve({ size: 16 * BLOCK })
-    await plexo.api.updateSettings({ speedLimit: 256 * KB })
+    await lychee.api.updateSettings({ speedLimit: 256 * KB })
     const started = Date.now()
-    await plexo.start(origin.url(), origin.sha256)
-    await plexo.waitForHttpStatus('completed', 30_000)
+    await lychee.start(origin.url(), origin.sha256)
+    await lychee.waitForHttpStatus('completed', 30_000)
     // 1 MB at 256 KB/s: four seconds, less the second's worth a bucket may hold.
     expect(Date.now() - started).toBeGreaterThan(2500)
   })
 
   test('slow mode holds downloads to its speed, the default one included', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: 96 * BLOCK })
     // Switched on as the status bar does, its speed never changed: 2 MB/s.
-    await plexo.api.updateSettings({ slowMode: true })
+    await lychee.api.updateSettings({ slowMode: true })
     const started = Date.now()
-    await plexo.start(origin.url(), origin.sha256)
-    await plexo.waitForHttpStatus('completed', 30_000)
+    await lychee.start(origin.url(), origin.sha256)
+    await lychee.waitForHttpStatus('completed', 30_000)
     // 6 MB at 2 MB/s: three seconds, less the second's worth a bucket may hold.
     expect(Date.now() - started).toBeGreaterThan(1800)
   })
 
   for (const period of ['day', 'week', 'month'] as const) {
     test(`a network stops at its ${period} limit and resumes when it is raised`, async ({
-      plexo,
+      lychee,
       serve
     }) => {
       const origin = await serve({ size: 16 * BLOCK })
-      await plexo.api.updateSettings({
+      await lychee.api.updateSettings({
         networkPreferences: { a: { dataLimit: 4 * BLOCK, dataLimitPeriod: period } }
       })
-      const id = await plexo.start(origin.url(), origin.sha256)
+      const id = await lychee.start(origin.url(), origin.sha256)
 
-      const stopped = await plexo.waitUntil((state) =>
+      const stopped = await lychee.waitUntil((state) =>
         state.networks.some((network) => network.id === 'a' && network.status === 'limit')
       )
       expect(stopped.status).toBe('downloading')
       expect(stopped.bytesDownloaded).toBeLessThan(16 * BLOCK)
-      expect((await plexo.api.networkUsage()).a).toBeGreaterThanOrEqual(4 * BLOCK)
+      expect((await lychee.api.networkUsage()).a).toBeGreaterThanOrEqual(4 * BLOCK)
 
-      await plexo.api.updateSettings({
+      await lychee.api.updateSettings({
         networkPreferences: { a: { dataLimit: 1024 * BLOCK, dataLimitPeriod: period } }
       })
-      await plexo.waitForHttpStatus('completed')
-      expect((await plexo.byId(id))?.status).toBe('completed')
+      await lychee.waitForHttpStatus('completed')
+      expect((await lychee.byId(id))?.status).toBe('completed')
     })
   }
 
-  test('a torrent under a speed limit still arrives whole', async ({ plexo }) => {
+  test('a torrent under a speed limit still arrives whole', async ({ lychee }) => {
     const swarm = await new Swarm().start()
     try {
       const data = seededBytes(1024 * KB, 31)
       const torrent = await swarm.seed([named(data, 'limited.bin')], { pieceLength: 64 * KB })
-      await plexo.api.updateSettings({ speedLimit: 384 * KB })
+      await lychee.api.updateSettings({ speedLimit: 384 * KB })
       const started = Date.now()
-      await plexo.start(await torrentFileOnDisk(torrent), sha256(data))
-      await plexo.waitForTorrentStatus('completed', 30_000)
+      await lychee.start(await torrentFileOnDisk(torrent), sha256(data))
+      await lychee.waitForTorrentStatus('completed', 30_000)
       expect(Date.now() - started).toBeGreaterThan(1500)
     } finally {
       await swarm.stop()
@@ -79,10 +79,10 @@ test.describe('speed and data limits', () => {
 })
 
 test('usage survives period switches and restart, and expired calendar periods reset', async ({
-  plexo,
+  lychee,
   dirs
 }) => {
-  await plexo.quit()
+  await lychee.quit()
   const now = Date.now()
   await writeFile(
     join(dirs.userData, 'network-usage.json'),
@@ -99,43 +99,43 @@ test('usage survives period switches and restart, and expired calendar periods r
       )
     })
   )
-  await plexo.launch()
+  await lychee.launch()
   for (const [period, count] of [
     ['day', 1024],
     ['week', 2048],
     ['month', 3072]
   ] as const) {
-    await plexo.api.updateSettings({
+    await lychee.api.updateSettings({
       networkPreferences: { a: { dataLimit: 1024 ** 3, dataLimitPeriod: period } }
     })
-    expect((await plexo.api.networkUsage()).a).toBe(count)
+    expect((await lychee.api.networkUsage()).a).toBe(count)
   }
-  await plexo.quit()
-  await plexo.launch()
-  expect((await plexo.api.networkUsage()).a).toBe(3072)
+  await lychee.quit()
+  await lychee.launch()
+  expect((await lychee.api.networkUsage()).a).toBe(3072)
   const future = nextDataReset('month', now).getTime() + 8 * 86400_000
-  await plexo.evaluateMain((_electron, at) => {
+  await lychee.evaluateMain((_electron, at) => {
     const original = Date.now
     ;(globalThis as Record<string, unknown>).__originalDateNow = original
     Date.now = () => at
   }, future)
   try {
     for (const period of ['day', 'week', 'month'] as const) {
-      await plexo.api.updateSettings({
+      await lychee.api.updateSettings({
         networkPreferences: { a: { dataLimit: 1024 ** 3, dataLimitPeriod: period } }
       })
-      expect((await plexo.api.networkUsage()).a ?? 0).toBe(0)
+      expect((await lychee.api.networkUsage()).a ?? 0).toBe(0)
     }
   } finally {
-    await plexo.evaluateMain(() => {
+    await lychee.evaluateMain(() => {
       Date.now = (globalThis as Record<string, unknown>).__originalDateNow as () => number
       delete (globalThis as Record<string, unknown>).__originalDateNow
     }, null)
   }
 })
 
-test('existing monthly usage remains available after migration', async ({ plexo, dirs }) => {
-  await plexo.quit()
+test('existing monthly usage remains available after migration', async ({ lychee, dirs }) => {
+  await lychee.quit()
   await writeFile(
     join(dirs.userData, 'network-usage.json'),
     JSON.stringify({
@@ -143,12 +143,12 @@ test('existing monthly usage remains available after migration', async ({ plexo,
       bytes: { a: 12345 }
     })
   )
-  await plexo.launch()
-  expect((await plexo.api.networkUsage()).a).toBe(12345)
-  await plexo.api.updateSettings({ networkPreferences: { a: { dataLimitPeriod: 'day' } } })
-  expect((await plexo.api.networkUsage()).a).toBe(0)
-  await plexo.api.updateSettings({ networkPreferences: { a: { dataLimitPeriod: 'month' } } })
-  expect((await plexo.api.networkUsage()).a).toBe(12345)
+  await lychee.launch()
+  expect((await lychee.api.networkUsage()).a).toBe(12345)
+  await lychee.api.updateSettings({ networkPreferences: { a: { dataLimitPeriod: 'day' } } })
+  expect((await lychee.api.networkUsage()).a).toBe(0)
+  await lychee.api.updateSettings({ networkPreferences: { a: { dataLimitPeriod: 'month' } } })
+  expect((await lychee.api.networkUsage()).a).toBe(12345)
 })
 
 test('calendar periods use local midnight, Monday weeks, and correct year boundaries', () => {
@@ -167,30 +167,30 @@ test('calendar periods use local midnight, Monday weeks, and correct year bounda
 
 for (const period of ['day', 'week', 'month'] as const) {
   test(`resetting ${period} usage preserves other periods and networks and survives restart`, async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: BLOCK })
-    await plexo.start(origin.url(), origin.sha256)
-    await plexo.waitForStatus('completed')
-    const before = await plexo.api.networkUsage()
+    await lychee.start(origin.url(), origin.sha256)
+    await lychee.waitForStatus('completed')
+    const before = await lychee.api.networkUsage()
     const id = Object.keys(before).find((key) => before[key] > 0)!
     expect(id).toBeTruthy()
-    await plexo.api.updateSettings({ networkPreferences: { [id]: { dataLimitPeriod: period } } })
-    await plexo.api.resetNetworkUsage(id)
-    expect((await plexo.api.networkUsage())[id]).toBe(0)
+    await lychee.api.updateSettings({ networkPreferences: { [id]: { dataLimitPeriod: period } } })
+    await lychee.api.resetNetworkUsage(id)
+    expect((await lychee.api.networkUsage())[id]).toBe(0)
     for (const [other, bytes] of Object.entries(before)) {
-      if (other !== id) expect((await plexo.api.networkUsage())[other]).toBe(bytes)
+      if (other !== id) expect((await lychee.api.networkUsage())[other]).toBe(bytes)
     }
     for (const otherPeriod of ['day', 'week', 'month'] as const) {
       if (otherPeriod === period) continue
-      await plexo.api.updateSettings({
+      await lychee.api.updateSettings({
         networkPreferences: { [id]: { dataLimitPeriod: otherPeriod } }
       })
-      expect((await plexo.api.networkUsage())[id]).toBe(before[id])
+      expect((await lychee.api.networkUsage())[id]).toBe(before[id])
     }
-    await plexo.api.updateSettings({ networkPreferences: { [id]: { dataLimitPeriod: period } } })
-    await plexo.relaunch()
-    expect((await plexo.api.networkUsage())[id]).toBe(0)
+    await lychee.api.updateSettings({ networkPreferences: { [id]: { dataLimitPeriod: period } } })
+    await lychee.relaunch()
+    expect((await lychee.api.networkUsage())[id]).toBe(0)
   })
 }

@@ -30,7 +30,7 @@ interface Env {
   os: string
   arch: 'arm64' | 'x64' | null
 }
-const D = createRequire(__filename)('../docs/downloads.js').PlexoDownloads as {
+const D = createRequire(__filename)('../docs/downloads.js').LycheeDownloads as {
   describe: (name: string) => Omit<Asset, 'file' | 'url' | 'recommended'> | null
   detectEnvironment: (
     nav: { userAgent: string; platform: string; maxTouchPoints?: number },
@@ -43,23 +43,23 @@ const D = createRequire(__filename)('../docs/downloads.js').PlexoDownloads as {
 // What a release actually contains (rc.7's file names), plus what electron-builder leaves lying
 // around in dist/ that must never be offered.
 const SHIPPED = [
-  'plexo-1.0.0-rc.7-arm64.AppImage',
-  'plexo-1.0.0-rc.7-arm64.dmg',
-  'plexo-1.0.0-rc.7-setup.exe',
-  'plexo-1.0.0-rc.7-x64.dmg',
-  'plexo-1.0.0-rc.7-x86_64.AppImage',
-  'plexo_1.0.0-rc.7_amd64.deb',
-  'plexo_1.0.0-rc.7_arm64.deb'
+  'lychee-1.0.0-rc.7-arm64.AppImage',
+  'lychee-1.0.0-rc.7-arm64.dmg',
+  'lychee-1.0.0-rc.7-setup.exe',
+  'lychee-1.0.0-rc.7-x64.dmg',
+  'lychee-1.0.0-rc.7-x86_64.AppImage',
+  'lychee_1.0.0-rc.7_amd64.deb',
+  'lychee_1.0.0-rc.7_arm64.deb'
 ]
 const NOISE = [
   'latest.yml',
   'latest-mac.yml',
-  'plexo-1.0.0-rc.7-arm64.dmg.blockmap',
-  'plexo-1.0.0-rc.7-setup.exe.blockmap',
-  'plexo_1.0.0-rc.7_amd64.snap',
-  'Plexo-1.0.0-rc.4-arm64-mac.zip'
+  'lychee-1.0.0-rc.7-arm64.dmg.blockmap',
+  'lychee-1.0.0-rc.7-setup.exe.blockmap',
+  'lychee_1.0.0-rc.7_amd64.snap',
+  'Lychee-1.0.0-rc.4-arm64-mac.zip'
 ]
-const BASE = 'https://github.com/anmolkapil/plexo/releases/download/v1.0.0-rc.7/'
+const BASE = 'https://github.com/tame-gg/lychee/releases/download/v1.0.0-rc.7/'
 const release = (names: string[] = [...SHIPPED, ...NOISE]): unknown => ({
   tag_name: 'v1.0.0-rc.7',
   prerelease: true,
@@ -123,13 +123,13 @@ const BROWSERS = {
 
 test.describe('what each file is', () => {
   const expected: Record<string, [string, string, string]> = {
-    'plexo-1.0.0-rc.7-arm64.dmg': ['mac', 'arm64', 'Apple silicon'],
-    'plexo-1.0.0-rc.7-x64.dmg': ['mac', 'x64', 'Intel'],
-    'plexo-1.0.0-rc.7-setup.exe': ['win', 'any', 'Windows 10 and 11'],
-    'plexo-1.0.0-rc.7-x86_64.AppImage': ['linux', 'x64', 'AppImage · x86_64'],
-    'plexo-1.0.0-rc.7-arm64.AppImage': ['linux', 'arm64', 'AppImage · ARM64'],
-    'plexo_1.0.0-rc.7_amd64.deb': ['linux', 'x64', 'Debian / Ubuntu · x86_64'],
-    'plexo_1.0.0-rc.7_arm64.deb': ['linux', 'arm64', 'Debian / Ubuntu · ARM64']
+    'lychee-1.0.0-rc.7-arm64.dmg': ['mac', 'arm64', 'Apple silicon'],
+    'lychee-1.0.0-rc.7-x64.dmg': ['mac', 'x64', 'Intel'],
+    'lychee-1.0.0-rc.7-setup.exe': ['win', 'any', 'Windows 10 and 11'],
+    'lychee-1.0.0-rc.7-x86_64.AppImage': ['linux', 'x64', 'AppImage · x86_64'],
+    'lychee-1.0.0-rc.7-arm64.AppImage': ['linux', 'arm64', 'AppImage · ARM64'],
+    'lychee_1.0.0-rc.7_amd64.deb': ['linux', 'x64', 'Debian / Ubuntu · x86_64'],
+    'lychee_1.0.0-rc.7_arm64.deb': ['linux', 'arm64', 'Debian / Ubuntu · ARM64']
   }
 
   for (const [file, [os, arch, title]] of Object.entries(expected)) {
@@ -143,11 +143,11 @@ test.describe('what each file is', () => {
   })
 
   test('a Windows installer with an architecture in its name is described as that one', () => {
-    expect(D.describe('plexo-2.0.0-x64-setup.exe')).toMatchObject({
+    expect(D.describe('lychee-2.0.0-x64-setup.exe')).toMatchObject({
       arch: 'x64',
       title: 'Windows · x64'
     })
-    expect(D.describe('plexo-2.0.0-arm64-setup.exe')).toMatchObject({ arch: 'arm64' })
+    expect(D.describe('lychee-2.0.0-arm64-setup.exe')).toMatchObject({ arch: 'arm64' })
   })
 })
 
@@ -191,17 +191,17 @@ test.describe('which download is offered', () => {
   const offered = (env: Env): string | undefined => D.build(release(), env).primary?.asset.file
 
   test('the right build for every system we can identify', () => {
-    expect(offered({ os: 'win', arch: null })).toBe('plexo-1.0.0-rc.7-setup.exe')
-    expect(offered({ os: 'mac', arch: 'arm64' })).toBe('plexo-1.0.0-rc.7-arm64.dmg')
-    expect(offered({ os: 'mac', arch: 'x64' })).toBe('plexo-1.0.0-rc.7-x64.dmg')
-    expect(offered({ os: 'linux', arch: 'x64' })).toBe('plexo-1.0.0-rc.7-x86_64.AppImage')
-    expect(offered({ os: 'linux', arch: 'arm64' })).toBe('plexo-1.0.0-rc.7-arm64.AppImage')
+    expect(offered({ os: 'win', arch: null })).toBe('lychee-1.0.0-rc.7-setup.exe')
+    expect(offered({ os: 'mac', arch: 'arm64' })).toBe('lychee-1.0.0-rc.7-arm64.dmg')
+    expect(offered({ os: 'mac', arch: 'x64' })).toBe('lychee-1.0.0-rc.7-x64.dmg')
+    expect(offered({ os: 'linux', arch: 'x64' })).toBe('lychee-1.0.0-rc.7-x86_64.AppImage')
+    expect(offered({ os: 'linux', arch: 'arm64' })).toBe('lychee-1.0.0-rc.7-arm64.AppImage')
   })
 
   test('an undecided Mac gets Apple silicon, with the Intel build one click away and a hint', () => {
     const model = D.build(release(), { os: 'mac', arch: null })
     expect(model.primary?.asset.arch).toBe('arm64')
-    expect(model.alternates.map((a) => a.asset.file)).toEqual(['plexo-1.0.0-rc.7-x64.dmg'])
+    expect(model.alternates.map((a) => a.asset.file)).toEqual(['lychee-1.0.0-rc.7-x64.dmg'])
     expect(model.hint).toMatch(/About This Mac/)
   })
 
@@ -215,11 +215,11 @@ test.describe('which download is offered', () => {
 
   test('Linux offers the .deb beside the AppImage, of the same architecture', () => {
     const arm = D.build(release(), { os: 'linux', arch: 'arm64' })
-    expect(arm.alternates.map((a) => a.asset.file)).toEqual(['plexo_1.0.0-rc.7_arm64.deb'])
+    expect(arm.alternates.map((a) => a.asset.file)).toEqual(['lychee_1.0.0-rc.7_arm64.deb'])
     const unknown = D.build(release(), { os: 'linux', arch: null })
     expect(unknown.alternates.map((a) => a.asset.file)).toEqual([
-      'plexo_1.0.0-rc.7_amd64.deb',
-      'plexo-1.0.0-rc.7-arm64.AppImage'
+      'lychee_1.0.0-rc.7_amd64.deb',
+      'lychee-1.0.0-rc.7-arm64.AppImage'
     ])
   })
 
@@ -231,7 +231,7 @@ test.describe('which download is offered', () => {
   })
 
   test('a release missing a platform leaves it out, and a Windows-only visitor still gets the installer', () => {
-    const windowsOnly = release(['plexo-1.0.0-rc.7-setup.exe'])
+    const windowsOnly = release(['lychee-1.0.0-rc.7-setup.exe'])
     expect(D.build(windowsOnly, { os: 'win', arch: null }).primary?.asset.os).toBe('win')
     expect(D.build(windowsOnly, { os: 'mac', arch: null }).primary).toBeNull()
     expect(D.build(windowsOnly, { os: 'mac', arch: null }).groups.map((g) => g.os)).toEqual(['win'])
@@ -246,10 +246,10 @@ test.describe('which download is offered', () => {
       'Linux:4'
     ])
     expect(model.groups[2].rows.map((r) => r.file)).toEqual([
-      'plexo-1.0.0-rc.7-x86_64.AppImage',
-      'plexo_1.0.0-rc.7_amd64.deb',
-      'plexo-1.0.0-rc.7-arm64.AppImage',
-      'plexo_1.0.0-rc.7_arm64.deb'
+      'lychee-1.0.0-rc.7-x86_64.AppImage',
+      'lychee_1.0.0-rc.7_amd64.deb',
+      'lychee-1.0.0-rc.7-arm64.AppImage',
+      'lychee_1.0.0-rc.7_arm64.deb'
     ])
     expect(model.groups.flatMap((g) => g.rows).filter((r) => r.recommended)).toHaveLength(1)
     const guessed = D.build(release(), { os: 'mac', arch: null })
@@ -263,11 +263,11 @@ test.describe('which download is offered', () => {
       size: 100 * 1048576,
       url: BASE + name
     }))
-    const text = D.markdown(files, 'https://getplexo.app/')
+    const text = D.markdown(files, 'https://tame.gg/projects/lychee/')
     for (const name of SHIPPED) expect(text.split(BASE + name + ')')).toHaveLength(2)
     for (const name of NOISE) expect(text).not.toContain(name)
     expect(text).toContain('[Apple silicon]')
-    expect(text).toContain('https://getplexo.app/#downloads')
+    expect(text).toContain('https://tame.gg/projects/lychee/#downloads')
     expect(text).not.toContain('notarized')
   })
 })
@@ -408,7 +408,7 @@ test.describe('the download page', () => {
       await expect(page.locator('#release-meta')).toContainText('Latest pre-release')
       await expect(page.getByRole('link', { name: 'Previous releases' })).toHaveAttribute(
         'href',
-        'https://github.com/anmolkapil/plexo/releases'
+        'https://github.com/tame-gg/lychee/releases'
       )
       await expect(page.locator('.release-badge')).toHaveCount(0)
     } finally {
@@ -418,8 +418,8 @@ test.describe('the download page', () => {
 
   test('release content and URLs cannot inject executable markup', async () => {
     const hostile = release([
-      'plexo-<img src=x onerror=document.title=1>-x64.dmg',
-      'plexo-1.0.0-setup.exe'
+      'lychee-<img src=x onerror=document.title=1>-x64.dmg',
+      'lychee-1.0.0-setup.exe'
     ]) as { tag_name: string; assets: { browser_download_url: string }[] }
     hostile.tag_name = '<img src=x onerror=document.title=1>'
     hostile.assets.push({ browser_download_url: 'javascript:alert(1)' })
@@ -428,7 +428,7 @@ test.describe('the download page', () => {
       await expect(page.locator('#release-meta')).toContainText('<img src=x onerror=')
       await expect(page.locator('#downloads img')).toHaveCount(0)
       await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0)
-      await expect(page).toHaveTitle(/Plexo/)
+      await expect(page).toHaveTitle(/Lychee/)
     } finally {
       await close()
     }
@@ -441,7 +441,7 @@ test.describe('the download page', () => {
       await expect(page.locator('#primary-btn')).toHaveAttribute('href', '#downloads')
       await expect(page.locator('#panel-win .asset-link')).toHaveAttribute(
         'href',
-        'https://github.com/anmolkapil/plexo/releases'
+        'https://github.com/tame-gg/lychee/releases'
       )
       await expect(page.locator('#panel-mac .install-help')).toHaveCount(0)
       for (const os of ['Windows', 'Linux']) {

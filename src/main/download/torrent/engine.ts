@@ -56,7 +56,7 @@ export async function storeNamed(name: string, onWritten: (path: string) => void
 }
 
 /**
- * A webtorrent client set up for Plexo:
+ * A webtorrent client set up for Lychee:
  * - uTP is off: its UDP sockets can't be pinned to a network the way `connect` pins TCP ones.
  * - Web seeds are off: webtorrent fetches them over HTTP itself, again past `connect`.
  * - WebRTC is off: those peers bypass the TCP hook too. The simple-peer patch also removes

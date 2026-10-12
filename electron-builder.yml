@@ -1,7 +1,7 @@
-appId: com.plexo.app
-productName: Plexo
+appId: gg.tame.lychee
+productName: Lychee
 # Shown in the macOS About window and Finder's Get Info, and in the Windows file properties.
-copyright: Copyright © 2026 Anmol Kapil
+copyright: Copyright © 2026 Anmol Kapil, © 2026 tame.gg
 afterPack: scripts/check-torrent-package.mjs
 directories:
   buildResources: build
@@ -15,7 +15,7 @@ files:
   # Windows (download/sparseFile.ts).
   - '!node_modules/koffi/{src,vendor,doc}/**'
   - '!node_modules/koffi/build/koffi/!(linux_x64|linux_arm64|win32_x64|win32_arm64)/**'
-  # Plexo uses TCP peers only. simple-peer is patched to use browser globals instead of loading
+  # Lychee uses TCP peers only. simple-peer is patched to use browser globals instead of loading
   # the native WebRTC polyfill; don't ship unused host-platform binaries in cross-platform builds.
   - '!node_modules/node-datachannel/**'
   - '!node_modules/webrtc-polyfill/**'
@@ -23,10 +23,10 @@ files:
 asarUnpack:
   - resources/**
 win:
-  # No protocols or fileAssociations: the NSIS installer would register Plexo as *the* handler for
+  # No protocols or fileAssociations: the NSIS installer would register Lychee as *the* handler for
   # magnet links and .torrent files, taking them from a torrent client the user already has.
-  # A .torrent can still be opened with Plexo through "Open with".
-  executableName: plexo
+  # A .torrent can still be opened with Lychee through "Open with".
+  executableName: lychee
   target:
     - target: nsis
       arch: [x64, arm64]
@@ -52,15 +52,15 @@ mac:
       arch: [x64, arm64]
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSDownloadsFolderUsageDescription: Plexo saves downloaded files to your Downloads folder.
-    # Magnet links and .torrent files can be opened with Plexo, as one choice among others: it's
+    - NSDownloadsFolderUsageDescription: Lychee saves downloaded files to your Downloads folder.
+    # Magnet links and .torrent files can be opened with Lychee, as one choice among others: it's
     # never made the default over a torrent client the user already has (LSHandlerRank).
-    # plexo:// is Plexo's own scheme, so registering it takes nothing from another app.
+    # lychee:// is Lychee's own scheme, so registering it takes nothing from another app.
     - CFBundleURLTypes:
         - CFBundleURLName: Magnet link
           CFBundleURLSchemes: [magnet]
-        - CFBundleURLName: Plexo
-          CFBundleURLSchemes: [plexo]
+        - CFBundleURLName: Lychee
+          CFBundleURLSchemes: [lychee]
       CFBundleDocumentTypes:
         - CFBundleTypeName: Torrent
           CFBundleTypeRole: Viewer
@@ -83,7 +83,7 @@ linux:
   maintainer: electronjs.org
   category: Utility
   # Offered for magnet links and .torrent files ("Open with"), not made their default.
-  mimeTypes: [x-scheme-handler/magnet, application/x-bittorrent, x-scheme-handler/plexo]
+  mimeTypes: [x-scheme-handler/magnet, application/x-bittorrent, x-scheme-handler/lychee]
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
@@ -91,5 +91,5 @@ npmRebuild: false
 # workflow uploads them, with the latest*.yml files the updater reads.
 publish:
   provider: github
-  owner: anmolkapil
-  repo: plexo
+  owner: tame-gg
+  repo: lychee

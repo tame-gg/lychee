@@ -22,13 +22,13 @@ const TRANSIENT: [string, Fault][] = [
 
 test.describe('transient server faults are retried to a correct file @smoke', () => {
   for (const [label, fault] of TRANSIENT) {
-    test(label, async ({ plexo, serve }) => {
+    test(label, async ({ lychee, serve }) => {
       const origin = await serve({ size: SIZE })
       let faulted = 0
       origin.setRule(({ range }) => (range && range.start > 0 && faulted++ < 3 ? fault : 'ok'))
 
-      await plexo.start(origin.url(), origin.sha256, { connections: 2 })
-      const state = await plexo.waitForStatus('completed')
+      await lychee.start(origin.url(), origin.sha256, { connections: 2 })
+      const state = await lychee.waitForStatus('completed')
       expect(faulted, 'the fault was actually injected').toBeGreaterThanOrEqual(3)
       expect(state.networks.reduce((sum, network) => sum + network.retries, 0)).toBeGreaterThan(0)
     })
@@ -36,13 +36,13 @@ test.describe('transient server faults are retried to a correct file @smoke', ()
 })
 
 test.describe('a connection stuck at a crawl @smoke', () => {
-  test.use({ appEnv: { PLEXO_E2E_SLOW_WARMUP_MS: '500', PLEXO_E2E_SLOW_FOR_MS: '1500' } })
+  test.use({ appEnv: { LYCHEE_E2E_SLOW_WARMUP_MS: '500', LYCHEE_E2E_SLOW_FOR_MS: '1500' } })
 
   const BLOCKS = 48
   const tookFullBlock = (entry: LoggedRequest): boolean =>
     entry.bytesSent === entry.range!.end! - entry.range!.start + 1
 
-  test('a crawling connection is reconnected, and its block resumed', async ({ plexo, serve }) => {
+  test('a crawling connection is reconnected, and its block resumed', async ({ lychee, serve }) => {
     const origin = await serve({ size: BLOCKS * BLOCK, bytesPerSecond: 256 * 1024 })
     let crawled = false
     // 2 KB/s: this one block alone would take ~32 s.
@@ -50,8 +50,8 @@ test.describe('a connection stuck at a crawl @smoke', () => {
       range?.start === BLOCK && !crawled ? ((crawled = true), { crawl: 2048 }) : 'ok'
     )
 
-    await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-    const state = await plexo.waitForStatus('completed', 15_000)
+    await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+    const state = await lychee.waitForStatus('completed', 15_000)
 
     const requests = origin.chunkRequests()
     const slow = requests.find((entry) => typeof entry.fault === 'object')!
@@ -66,20 +66,20 @@ test.describe('a connection stuck at a crawl @smoke', () => {
     expect(state.networks.reduce((sum, network) => sum + network.retries, 0)).toBe(0)
   })
 
-  test('connections that are all equally slow are left alone', async ({ plexo, serve }) => {
+  test('connections that are all equally slow are left alone', async ({ lychee, serve }) => {
     const origin = await serve({ size: BLOCKS * BLOCK, bytesPerSecond: 256 * 1024 })
-    await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-    await plexo.waitForStatus('completed', 15_000)
+    await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+    await lychee.waitForStatus('completed', 15_000)
     expect(origin.chunkRequests().every(tookFullBlock), 'no request was cut off').toBe(true)
   })
 
-  test('a block is refreshed at most twice, then left to finish', async ({ plexo, serve }) => {
+  test('a block is refreshed at most twice, then left to finish', async ({ lychee, serve }) => {
     const origin = await serve({ size: 3 * BLOCK })
     // Two fast blocks set the reference; every request for the third crawls.
     origin.setRule(({ range }) => (range && range.start >= 2 * BLOCK ? { crawl: 8192 } : 'ok'))
 
-    await plexo.start(origin.url(), origin.sha256, { connections: 1 })
-    await plexo.waitForStatus('completed', 30_000)
+    await lychee.start(origin.url(), origin.sha256, { connections: 1 })
+    await lychee.waitForStatus('completed', 30_000)
     const lastBlock = origin.chunkRequests().filter((entry) => entry.range!.start >= 2 * BLOCK)
     expect(lastBlock).toHaveLength(3)
   })
@@ -87,20 +87,20 @@ test.describe('a connection stuck at a crawl @smoke', () => {
 
 test.describe('servers without range support @smoke', () => {
   // With no ranges the only way to recover a dropped connection is to start the file over.
-  test('a dropped connection restarts from the beginning', async ({ plexo, serve }) => {
+  test('a dropped connection restarts from the beginning', async ({ lychee, serve }) => {
     const origin = await serve({ size: 20 * BLOCK, ranges: false })
     let transfers = 0
     origin.setRule(({ range }) =>
       isProbe(range) ? 'ok' : transfers++ === 0 ? { cutAfter: 7 * BLOCK + 3 } : 'ok'
     )
-    await plexo.start(origin.url(), origin.sha256)
-    await plexo.waitForStatus('completed')
+    await lychee.start(origin.url(), origin.sha256)
+    await lychee.waitForStatus('completed')
     expect(transfers, 'the second attempt fetched the whole file again').toBe(2)
   })
 })
 
 test('one network dies for good mid-download; the other finishes it @smoke', async ({
-  plexo,
+  lychee,
   serve
 }) => {
   test.skip(!LAN_ADDRESS, 'needs a LAN address to act as the second network')
@@ -110,8 +110,8 @@ test('one network dies for good mid-download; the other finishes it @smoke', asy
   origin.setRule(({ from, range }) =>
     from !== '127.0.0.1' && range && !isProbe(range) && fromB++ >= 2 ? { status: 503 } : 'ok'
   )
-  await plexo.start(origin.url(), origin.sha256, { networks: ['a', 'b'], connections: 2 })
-  await plexo.waitForStatus('completed')
+  await lychee.start(origin.url(), origin.sha256, { networks: ['a', 'b'], connections: 2 })
+  await lychee.waitForStatus('completed')
   const failedOverB = origin.log.filter(
     (entry) => entry.from !== '127.0.0.1' && entry.status === 503
   )
@@ -119,10 +119,10 @@ test('one network dies for good mid-download; the other finishes it @smoke', asy
 })
 
 test.describe('a busy server @smoke', () => {
-  test.use({ appEnv: { PLEXO_E2E_SERVER_BUSY_MS: '60000' } })
+  test.use({ appEnv: { LYCHEE_E2E_SERVER_BUSY_MS: '60000' } })
 
   test('is waited out for as long as it asks, past the retries a wrong answer gets', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: SIZE })
@@ -134,8 +134,8 @@ test.describe('a busy server @smoke', () => {
         ? { status: 503, headers: { 'Retry-After': '1' } }
         : 'ok'
     )
-    await plexo.start(origin.url(), origin.sha256, { connections: 2 })
-    await plexo.waitForStatus('completed')
+    await lychee.start(origin.url(), origin.sha256, { connections: 2 })
+    await lychee.waitForStatus('completed')
     expect(busy).toBeGreaterThan(14)
 
     // It asked the network to wait, so no stream asked again within the second, save a request
@@ -155,11 +155,11 @@ test.describe('permanent faults end in a clean error @smoke', () => {
     ['every chunk request redirects to itself', { redirect: '/files/test.bin' }]
   ]
   for (const [label, fault] of PERMANENT) {
-    test(label, async ({ plexo, serve }) => {
+    test(label, async ({ lychee, serve }) => {
       const origin = await serve({ size: SIZE })
       origin.setRule(({ range }) => (range && !isProbe(range) ? fault : 'ok'))
-      await plexo.start(origin.url(), origin.sha256, { connections: 2 })
-      const state = await plexo.waitForStatus('error')
+      await lychee.start(origin.url(), origin.sha256, { connections: 2 })
+      const state = await lychee.waitForStatus('error')
       expect(state.error).toBeTruthy()
     })
   }
@@ -188,7 +188,7 @@ test.describe('the file changes on the server mid-download @smoke', () => {
   }
 
   for (const [label, change] of cases) {
-    test(label, async ({ plexo, serve }) => {
+    test(label, async ({ lychee, serve }) => {
       const origin = await serve({
         size: SIZE,
         seed: 1,
@@ -196,13 +196,13 @@ test.describe('the file changes on the server mid-download @smoke', () => {
         lastModified: change.lastModified ? 'Wed, 01 Jan 2025 00:00:00 GMT' : null
       })
       const reached = origin.hold(3 * BLOCK + 100)
-      await plexo.start(origin.url(), origin.sha256, { connections: 2 })
+      await lychee.start(origin.url(), origin.sha256, { connections: 2 })
       await reached
       mutate({ origin, ...change })
       origin.release()
 
       // Never a file stitched from two versions: the download stops with a clear reason.
-      const state = await plexo.waitForStatus(['completed', 'error'])
+      const state = await lychee.waitForStatus(['completed', 'error'])
       expect(state.status).toBe('error')
       expect(state.error).toMatch(/changed during the download/)
     })
@@ -211,33 +211,33 @@ test.describe('the file changes on the server mid-download @smoke', () => {
 
 test.describe('servers that label the same file differently @smoke', () => {
   // None of these is a changed file, so none may fail the download.
-  test('load balancer: identical bytes, two different ETags', async ({ plexo, serve }) => {
+  test('load balancer: identical bytes, two different ETags', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE, etag: '"server-a"' })
     origin.setVersionRule(({ n }) =>
       n % 2 === 0 ? { content: origin.content, etag: '"server-b"' } : undefined
     )
-    await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-    await plexo.waitForStatus('completed')
+    await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+    await lychee.waitForStatus('completed')
     expect(origin.log.filter((entry) => entry.n % 2 === 0).length).toBeGreaterThan(0)
   })
 
-  test('the same ETag, differing only by W/ or a -gzip suffix', async ({ plexo, serve }) => {
+  test('the same ETag, differing only by W/ or a -gzip suffix', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE, etag: '"v1"' })
     const variants = ['W/"v1"', '"v1-gzip"', '"v1"']
     origin.setVersionRule(({ n }) => ({ content: origin.content, etag: variants[n % 3] }))
-    await plexo.start(origin.url(), origin.sha256, { connections: 2 })
-    await plexo.waitForStatus('completed')
+    await lychee.start(origin.url(), origin.sha256, { connections: 2 })
+    await lychee.waitForStatus('completed')
   })
 
   test('half-rolled-out new version: some servers new, some old → error, never a mix', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: SIZE, seed: 1, etag: '"old"' })
     const next = seededBytes(SIZE, 2)
     origin.setVersionRule(({ n }) => (n % 2 === 0 ? { content: next, etag: '"new"' } : undefined))
-    await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-    const state = await plexo.waitForStatus(['completed', 'error'])
+    await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+    const state = await lychee.waitForStatus(['completed', 'error'])
     expect(state.status).toBe('error')
     expect(state.error).toMatch(/changed during the download/)
   })

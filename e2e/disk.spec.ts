@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { chmod, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { BLOCK, expect, PlexoApp, test } from './fixtures'
+import { BLOCK, expect, LycheeApp, test } from './fixtures'
 
 // E. The disk: out of space, folders vanishing, no permission. The small volumes are real
 // filesystems (a RAM disk on macOS, tmpfs on Linux), so ENOSPC comes from the OS, not a mock.
@@ -17,7 +17,7 @@ interface Volume {
 async function smallVolume(megabytes: number): Promise<Volume | null> {
   try {
     if (process.platform === 'darwin') {
-      const name = `plexoe2e${process.pid}${Date.now() % 100000}`
+      const name = `lycheee2e${process.pid}${Date.now() % 100000}`
       const device = execFileSync('hdiutil', ['attach', '-nomount', `ram://${megabytes * 2048}`])
         .toString()
         .trim()
@@ -30,7 +30,7 @@ async function smallVolume(megabytes: number): Promise<Volume | null> {
       }
     }
     if (process.platform === 'linux') {
-      const path = await mkdtemp(join(tmpdir(), 'plexo-vol-'))
+      const path = await mkdtemp(join(tmpdir(), 'lychee-vol-'))
       execFileSync('sudo', [
         '-n',
         'mount',
@@ -58,7 +58,7 @@ async function smallVolume(megabytes: number): Promise<Volume | null> {
 
 test.describe('disk space @disk', () => {
   test('a file bigger than the free space is refused before anything is written', async ({
-    plexo,
+    lychee,
     serve,
     dirs
   }) => {
@@ -69,13 +69,13 @@ test.describe('disk space @disk', () => {
       await mkdir(dest)
       const origin = await serve({ size: 256 * BLOCK }) // 16 MB
       await expect(
-        plexo.start(origin.url(), origin.sha256, { destinationDir: dest })
+        lychee.start(origin.url(), origin.sha256, { destinationDir: dest })
       ).rejects.toThrow(/Not enough disk space/)
       expect(await readdir(dest)).toEqual([])
       const downloads = join(dirs.userData, 'downloads')
       expect(existsSync(downloads) ? await readdir(downloads) : []).toEqual([])
     } finally {
-      await plexo.quit()
+      await lychee.quit()
       await volume!.dispose()
     }
   })
@@ -87,7 +87,7 @@ test.describe('disk space @disk', () => {
     test.skip(!volume, 'cannot create a small volume on this machine')
     // Both metadata and destination are on the small volume; the payload must occupy only one copy.
     // Room is left for Chromium's own caches in userData, which take several MB at launch.
-    const app = new PlexoApp({
+    const app = new LycheeApp({
       userData: join(volume!.path, 'userData'),
       dest: join(volume!.path, 'dest')
     })
@@ -110,22 +110,22 @@ test.describe('destination folder problems @smoke', () => {
   // Also tests a destination write error: the staging file cannot be opened, and cleanup must
   // surface that instead of waiting forever for a 'drain' that never comes.
   test('destination folder deleted mid-download → error, nothing left', async ({
-    plexo,
+    lychee,
     serve,
     dirs
   }) => {
     const origin = await serve({ size: 24 * BLOCK })
     const reached = origin.hold(10 * BLOCK)
-    await plexo.start(origin.url(), origin.sha256)
+    await lychee.start(origin.url(), origin.sha256)
     await reached
     await rm(dirs.dest, { recursive: true, force: true })
     origin.release()
-    const state = await plexo.waitForStatus(['completed', 'error'])
+    const state = await lychee.waitForStatus(['completed', 'error'])
     expect(state.status).toBe('error')
   })
 
   test('read-only destination folder → refused, and nothing left in userData', async ({
-    plexo,
+    lychee,
     serve,
     dirs
   }) => {
@@ -133,7 +133,7 @@ test.describe('destination folder problems @smoke', () => {
     const origin = await serve({ size: 4 * BLOCK })
     await chmod(dirs.dest, 0o555)
     try {
-      await expect(plexo.start(origin.url(), origin.sha256)).rejects.toThrow(/EACCES|permission/i)
+      await expect(lychee.start(origin.url(), origin.sha256)).rejects.toThrow(/EACCES|permission/i)
       const downloads = join(dirs.userData, 'downloads')
       expect(
         existsSync(downloads) ? await readdir(downloads) : [],

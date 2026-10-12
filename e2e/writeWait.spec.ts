@@ -2,18 +2,18 @@ import { expect, test } from './fixtures'
 
 test.use({
   appEnv: {
-    PLEXO_E2E_BLOCK_BYTES: String(1024 * 1024),
-    PLEXO_E2E_HEDGE_MS: '2000',
-    PLEXO_E2E_SLOW_WARMUP_MS: '5000',
-    PLEXO_E2E_SLOW_FOR_MS: '10000'
+    LYCHEE_E2E_BLOCK_BYTES: String(1024 * 1024),
+    LYCHEE_E2E_HEDGE_MS: '2000',
+    LYCHEE_E2E_SLOW_WARMUP_MS: '5000',
+    LYCHEE_E2E_SLOW_FOR_MS: '10000'
   }
 })
 
 test('a disk-held range is not fetched again while other streams finish @smoke', async ({
-  plexo,
+  lychee,
   serve
 }) => {
-  await plexo.evaluateMain(() => {
+  await lychee.evaluateMain(() => {
     const fs = process.getBuiltinModule('node:fs') as typeof import('node:fs')
     const prototype = fs.WriteStream.prototype as unknown as {
       _write: (chunk: Buffer, encoding: string, callback: (error?: Error | null) => void) => void
@@ -30,8 +30,8 @@ test('a disk-held range is not fetched again while other streams finish @smoke',
     }
   }, null)
   const origin = await serve({ size: 4 * 1024 * 1024 })
-  await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-  await plexo.waitForHttpStatus('completed', 15000)
+  await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+  await lychee.waitForHttpStatus('completed', 15000)
   const ranges = origin.chunkRequests()
   expect(ranges).toHaveLength(4)
 })

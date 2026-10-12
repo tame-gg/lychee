@@ -361,7 +361,7 @@ function NetworkPage({
     setError(null)
     try {
       if (reset === 'usage') {
-        await window.plexo.resetNetworkUsage(id)
+        await window.lychee.resetNetworkUsage(id)
         onUsageReset()
       } else change({ speedLimit: undefined, dataLimit: undefined })
       setReset(null)
@@ -382,7 +382,7 @@ function NetworkPage({
       <div className="flex flex-col gap-1 pb-3">
         <h3 className="font-sans text-[18px] leading-none font-semibold">{name}</h3>
         <div className="font-mono text-[12px] text-muted-foreground">
-          {formatBytes(used)} used by Plexo {dataUsageLabel(period)}
+          {formatBytes(used)} used by Lychee {dataUsageLabel(period)}
         </div>
       </div>
 
@@ -653,7 +653,7 @@ function LimitsEditor({
       }
     }
     try {
-      await window.plexo.updateSettings(patch)
+      await window.lychee.updateSettings(patch)
       useAppStore.setState(patch)
       onClose()
     } catch (cause) {

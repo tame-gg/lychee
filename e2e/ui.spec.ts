@@ -13,10 +13,10 @@ const SIZE = 24 * BLOCK
 
 /** The destination picker and "Reveal in Finder" go through native OS UI — replace both. */
 async function stubNativeUi(
-  plexo: import('./fixtures').PlexoApp,
+  lychee: import('./fixtures').LycheeApp,
   destination: string
 ): Promise<void> {
-  await plexo.evaluateMain(({ dialog, shell }, dest) => {
+  await lychee.evaluateMain(({ dialog, shell }, dest) => {
     dialog.showOpenDialog = (async () => ({ canceled: false, filePaths: [dest] })) as never
     const revealed: string[] = []
     ;(globalThis as Record<string, unknown>).__revealed = revealed
@@ -25,31 +25,31 @@ async function stubNativeUi(
 }
 
 test('Show in Finder on a download in progress shows its staging file', async ({
-  plexo,
+  lychee,
   serve,
   dirs
 }) => {
   const origin = await serve({ size: SIZE })
-  await stubNativeUi(plexo, dirs.dest)
+  await stubNativeUi(lychee, dirs.dest)
   const reached = origin.hold(6 * BLOCK)
-  const id = await plexo.start(origin.url(), origin.sha256)
+  const id = await lychee.start(origin.url(), origin.sha256)
   await reached
-  const { destinationPath } = (await plexo.api.listDownloads()).find(
+  const { destinationPath } = (await lychee.api.listDownloads()).find(
     (entry) => entry.state.id === id
   )!.state
-  // The final file isn't there yet: what's on disk is `<name>.plexo`.
-  expect(await plexo.api.revealDownload(id)).toBe(true)
+  // The final file isn't there yet: what's on disk is `<name>.lychee`.
+  expect(await lychee.api.revealDownload(id)).toBe(true)
   expect(
-    await plexo.evaluateMain(() => (globalThis as Record<string, unknown>).__revealed, null)
-  ).toEqual([`${destinationPath}.plexo`])
+    await lychee.evaluateMain(() => (globalThis as Record<string, unknown>).__revealed, null)
+  ).toEqual([`${destinationPath}.lychee`])
   origin.release()
 })
 
 test.describe('a torrent through the UI', () => {
   // This journey inspects a peer row, not network reassignment. Keep one network stable;
   // routing across networks and globally unique peer IDs are checked by torrent specs/invariants.
-  test.use({ appEnv: { PLEXO_E2E_INTERFACES: interfacesEnv({ a: NETWORKS.a }) } })
-  test('choose its files, watch its peers, finish', async ({ plexo, dirs }) => {
+  test.use({ appEnv: { LYCHEE_E2E_INTERFACES: interfacesEnv({ a: NETWORKS.a }) } })
+  test('choose its files, watch its peers, finish', async ({ lychee, dirs }) => {
     const swarm = await new Swarm().start()
     try {
       const files = ['a.bin', 'b.bin', 'c.bin'].map((name, index) =>
@@ -59,14 +59,14 @@ test.describe('a torrent through the UI', () => {
       const options = { folder: 'Trio', pieceLength: 64 * 1024, uploadLimit: 200 * 1024 }
       await swarm.seed(files, options)
       const torrent = await swarm.seed(files, options)
-      await stubNativeUi(plexo, dirs.dest)
-      const page = plexo.page
+      await stubNativeUi(lychee, dirs.dest)
+      const page = lychee.page
 
-      const link = await plexo.newDownload()
+      const link = await lychee.newDownload()
       await page.getByRole('button', { name: 'Change' }).click()
       await link.fill(await torrentFileOnDisk(torrent))
       await page.getByRole('checkbox', { name: /b\.bin/ }).click()
-      await plexo.expectNextDownload(
+      await lychee.expectNextDownload(
         treeSha(
           [files[0], files[2]].map((data) => ({ path: (data as { name?: string }).name!, data }))
         )
@@ -135,10 +135,10 @@ test.describe('a torrent through the UI', () => {
 
 test.describe('UI journeys @smoke', () => {
   test('minimum window keeps download controls and a network row in view', async ({
-    plexo,
+    lychee,
     serve
   }) => {
-    const minimum = await plexo.evaluateMain(({ BrowserWindow }) => {
+    const minimum = await lychee.evaluateMain(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0]
       const [width, height] = window.getMinimumSize()
       window.setSize(width, height)
@@ -148,9 +148,9 @@ test.describe('UI journeys @smoke', () => {
     expect(minimum.size).toEqual(minimum.minimum)
     const origin = await serve({ size: SIZE })
     const reached = origin.hold(0)
-    await plexo.start(origin.url(), origin.sha256)
+    await lychee.start(origin.url(), origin.sha256)
     await reached
-    const page = plexo.page
+    const page = lychee.page
     await page.getByRole('button', { name: 'Open test.bin', exact: true }).click()
     // An empty bar is still a progress indicator: its track and accessible value must exist
     // before the server sends the first byte.
@@ -177,22 +177,22 @@ test.describe('UI journeys @smoke', () => {
     })
     origin.release()
     await page.getByRole('button', { name: 'Resume', exact: true }).click()
-    await plexo.waitForHttpStatus('completed')
+    await lychee.waitForHttpStatus('completed')
     await expect(page.getByRole('button', { name: /Show in (Finder|folder)/ })).toBeInViewport({
       ratio: 1
     })
   })
 
   test('paste a link, start, pause, resume, finish, reveal the file', async ({
-    plexo,
+    lychee,
     serve,
     dirs
   }) => {
     const origin = await serve({ size: SIZE })
-    await stubNativeUi(plexo, dirs.dest)
-    const page = plexo.page
+    await stubNativeUi(lychee, dirs.dest)
+    const page = lychee.page
 
-    const link = await plexo.newDownload()
+    const link = await lychee.newDownload()
     await page.getByRole('button', { name: 'Change' }).click()
     await link.fill(origin.url())
     const start = page.getByRole('button', { name: 'Download' })
@@ -200,11 +200,11 @@ test.describe('UI journeys @smoke', () => {
     await page.getByRole('group', { name: 'Streams' }).getByRole('button', { name: '8' }).click()
 
     const reached = origin.hold(6 * BLOCK)
-    await plexo.expectNextDownload(origin.sha256)
+    await lychee.expectNextDownload(origin.sha256)
     await start.click()
     await reached
     // The streams picked in the dialog reach the download.
-    const { id } = (await plexo.current())!
+    const { id } = (await lychee.current())!
     const manifestPath = join(dirs.userData, 'downloads', id, 'manifest.json')
     await expect
       .poll(async () => JSON.parse(await readFile(manifestPath, 'utf-8')).requestPayload)
@@ -224,23 +224,23 @@ test.describe('UI journeys @smoke', () => {
     await expect(page.getByText('Streams', { exact: true })).toBeVisible()
     await expect(page.getByText(/^written in \d+ chunks/)).toBeVisible()
     await reveal.click()
-    const { destinationPath } = (await plexo.current())!
+    const { destinationPath } = (await lychee.current())!
     await expect
       .poll(() =>
-        plexo.evaluateMain(() => (globalThis as Record<string, unknown>).__revealed, null)
+        lychee.evaluateMain(() => (globalThis as Record<string, unknown>).__revealed, null)
       )
       .toEqual([destinationPath])
   })
 
   test('delete through the confirmation dialog, then download it again', async ({
-    plexo,
+    lychee,
     serve,
     dirs
   }) => {
     const origin = await serve({ size: SIZE })
-    await stubNativeUi(plexo, dirs.dest)
-    const page = plexo.page
-    let link = await plexo.newDownload()
+    await stubNativeUi(lychee, dirs.dest)
+    const page = lychee.page
+    let link = await lychee.newDownload()
     await page.getByRole('button', { name: 'Change' }).click()
     await link.fill(origin.url())
 
@@ -253,43 +253,43 @@ test.describe('UI journeys @smoke', () => {
     // Gone, with what it had downloaded.
     await expect(page.getByText('No downloads yet')).toBeVisible()
 
-    link = await plexo.newDownload()
+    link = await lychee.newDownload()
     await link.fill(origin.url())
-    await plexo.expectNextDownload(origin.sha256)
+    await lychee.expectNextDownload(origin.sha256)
     await page.getByRole('button', { name: 'Download' }).click({ timeout: 5000 })
-    await plexo.waitForStatus('completed')
+    await lychee.waitForStatus('completed')
   })
 
   test('a link the server rejects shows the error and keeps Download disabled', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: SIZE })
     origin.setRule(() => ({ status: 404 }))
-    const page = plexo.page
-    await (await plexo.newDownload()).fill(origin.url())
+    const page = lychee.page
+    await (await lychee.newDownload()).fill(origin.url())
     await expect(page.getByText(/couldn’t be found/)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Download' })).toBeDisabled()
   })
 
-  test('a completed download is shown again after a restart', async ({ plexo, serve }) => {
+  test('a completed download is shown again after a restart', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE })
-    await plexo.start(origin.url(), origin.sha256)
-    const { fileName } = await plexo.waitForStatus('completed')
-    await plexo.relaunch()
+    await lychee.start(origin.url(), origin.sha256)
+    const { fileName } = await lychee.waitForStatus('completed')
+    await lychee.relaunch()
     // Listed under Finished; opened, it shows as it did when it finished.
-    await plexo.page.getByRole('button', { name: `Open ${fileName}` }).click()
-    await expect(plexo.page.getByRole('button', { name: /Show in (Finder|folder)/ })).toBeVisible()
+    await lychee.page.getByRole('button', { name: `Open ${fileName}` }).click()
+    await expect(lychee.page.getByRole('button', { name: /Show in (Finder|folder)/ })).toBeVisible()
   })
 })
 
 // What a user sets is still set after they reload or restart — checked only through what they see.
 test.describe('settings @smoke', () => {
   test('every choice survives a reload and a restart, even made right before', async ({
-    plexo,
+    lychee,
     dirs
   }) => {
-    const page = (): Page => plexo.page
+    const page = (): Page => lychee.page
     const themeToggle = page().getByRole('button', { name: /^Switch to (dark|light) theme$/ })
     // After switching, the toggle offers to switch back.
     const labelAfterSwitch = (await themeToggle.getAttribute('aria-label'))!.includes('dark')
@@ -297,8 +297,8 @@ test.describe('settings @smoke', () => {
       : 'Switch to dark theme'
     await themeToggle.click()
 
-    await stubNativeUi(plexo, dirs.dest)
-    await plexo.newDownload()
+    await stubNativeUi(lychee, dirs.dest)
+    await lychee.newDownload()
     await page().getByRole('button', { name: 'Change' }).click()
     const destinationRow = (): Locator => page().getByText('Save to', { exact: true }).locator('..')
     const chosenDestination = await destinationRow().innerText()
@@ -318,7 +318,7 @@ test.describe('settings @smoke', () => {
 
     const expectAllKept = async (): Promise<void> => {
       await expect(page().getByRole('button', { name: labelAfterSwitch })).toBeVisible()
-      await plexo.newDownload()
+      await lychee.newDownload()
       await expect(destinationRow()).toHaveText(chosenDestination, { useInnerText: true })
       // Presentation may abbreviate home; persistence must retain the usable absolute path.
       const saved = JSON.parse(await readFile(join(dirs.userData, 'app-settings.json'), 'utf8'))
@@ -338,52 +338,52 @@ test.describe('settings @smoke', () => {
     // No waiting for saves: a user doesn't either.
     await page().reload()
     await expectAllKept()
-    await plexo.relaunch()
+    await lychee.relaunch()
     await expectAllKept()
   })
 
   test('a broken settings file falls back to what a fresh install shows', async ({
-    plexo,
+    lychee,
     dirs
   }) => {
     const settingsPath = join(dirs.userData, 'app-settings.json')
     // New download's "Save to" row, as the user sees it — compared whole, so no platform's idea
     // of the default folder is baked into the test.
     const choices = async (): Promise<string> => {
-      await plexo.newDownload()
-      const row = await plexo.page.getByText('Save to', { exact: true }).locator('..').innerText()
-      await plexo.page.keyboard.press('Escape')
+      await lychee.newDownload()
+      const row = await lychee.page.getByText('Save to', { exact: true }).locator('..').innerText()
+      await lychee.page.keyboard.press('Escape')
       return row
     }
     const fresh = await choices()
 
-    await plexo.quit()
+    await lychee.quit()
     await writeFile(settingsPath, '{"destinationDir": "/')
-    await plexo.launch()
+    await lychee.launch()
     expect(await choices()).toEqual(fresh)
 
-    await plexo.quit()
+    await lychee.quit()
     await writeFile(settingsPath, JSON.stringify({ destinationDir: join(dirs.dest, 'unplugged') }))
-    await plexo.launch()
+    await lychee.launch()
     expect(await choices()).toEqual(fresh)
   })
 })
 
 test.describe('no networks', () => {
-  test.use({ appEnv: { PLEXO_E2E_INTERFACES: '' } })
+  test.use({ appEnv: { LYCHEE_E2E_INTERFACES: '' } })
 
-  test('a network appearing makes the list ready for downloads @smoke', async ({ plexo }) => {
-    await expect(plexo.page.getByText('No networks connected')).toBeVisible()
+  test('a network appearing makes the list ready for downloads @smoke', async ({ lychee }) => {
+    await expect(lychee.page.getByText('No networks connected')).toBeVisible()
     // A manual scan is safe while the list stays empty. Once an interface appears, the
     // background monitor can remove this button before Playwright finishes clicking it.
-    await plexo.page.getByRole('button', { name: 'Scan again' }).click()
-    await expect(plexo.page.getByText('No networks connected')).toBeVisible()
-    await plexo.evaluateMain(
+    await lychee.page.getByRole('button', { name: 'Scan again' }).click()
+    await expect(lychee.page.getByText('No networks connected')).toBeVisible()
+    await lychee.evaluateMain(
       (_electron, value) => {
-        process.env['PLEXO_E2E_INTERFACES'] = value
+        process.env['LYCHEE_E2E_INTERFACES'] = value
       },
       interfacesEnv({ a: NETWORKS['a'] })
     )
-    await expect(plexo.page.getByText('No downloads yet')).toBeVisible()
+    await expect(lychee.page.getByText('No downloads yet')).toBeVisible()
   })
 })

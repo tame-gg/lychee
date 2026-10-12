@@ -69,7 +69,7 @@ export function StatusBar(): React.JSX.Element {
   useEffect(() => {
     let disposed = false
     const load = (): void => {
-      void window.plexo
+      void window.lychee
         .freeSpace(destinationDir)
         .then((bytes) => !disposed && setFree(bytes))
         .catch(() => {})

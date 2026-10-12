@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://getplexo.app/sitemap.xml
+Sitemap: https://tame.gg/projects/lychee/sitemap.xml

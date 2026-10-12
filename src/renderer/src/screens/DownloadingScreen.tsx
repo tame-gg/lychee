@@ -71,7 +71,7 @@ function BigStat({
       </div>
       <div className="flex items-baseline gap-[7px]">
         <div
-          className={`font-mono text-[38px] leading-[0.88] font-semibold tracking-[-0.03em] tabular-nums ${valueClass}`}
+          className={`font-serif text-[44px] leading-[0.88] font-normal tracking-[-0.01em] tabular-nums ${valueClass}`}
         >
           {value}
         </div>
@@ -135,12 +135,12 @@ export const DownloadingScreen = memo(function DownloadingScreen({
   useEffect(() => {
     if (isPaused) {
       const label = isQueued ? 'Queued' : 'Paused'
-      document.title = knownSize ? `Plexo — ${label} (${percent}%)` : `Plexo — ${label}`
+      document.title = knownSize ? `Lychee — ${label} (${percent}%)` : `Lychee — ${label}`
     } else {
-      document.title = knownSize ? `Plexo — ${percent}%` : 'Plexo — downloading'
+      document.title = knownSize ? `Lychee — ${percent}%` : 'Lychee — downloading'
     }
     return () => {
-      document.title = 'Plexo'
+      document.title = 'Lychee'
     }
   }, [percent, knownSize, isPaused, isQueued])
 
@@ -500,7 +500,7 @@ export const DownloadingScreen = memo(function DownloadingScreen({
                 totalBytes={wantedBytes(download)}
                 blocks={download.kind === 'http' ? download.blocks : undefined}
                 onSwitch={(enabled) =>
-                  void window.plexo.setDownloadNetwork(download.id, row.id, enabled)
+                  void window.lychee.setDownloadNetwork(download.id, row.id, enabled)
                 }
               />
             ))}

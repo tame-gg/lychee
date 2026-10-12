@@ -1,5 +1,5 @@
 import { api } from './api'
-import { plexoPort, reach } from './plexo'
+import { lycheePort, reach } from './lychee'
 import { loadSettings, saveSettings, siteOf } from './settings'
 
 const element = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
@@ -38,12 +38,12 @@ async function renderConnection(): Promise<void> {
   element('dot').className = `dot ${reached === 'ok' ? 'ok' : reached === 'update' ? 'warn' : ''}`
   element('connection').textContent =
     reached === 'ok'
-      ? 'Connected to Plexo'
+      ? 'Connected to Lychee'
       : reached === 'update'
-        ? 'Update Plexo to use this extension'
-        : 'Plexo isn’t open'
-  element('open-plexo').hidden = reached !== 'closed'
-  const port = plexoPort()
+        ? 'Update Lychee to use this extension'
+        : 'Lychee isn’t open'
+  element('open-lychee').hidden = reached !== 'closed'
+  const port = lycheePort()
   element('port').textContent = port === null ? '' : `127.0.0.1:${port}`
 }
 
@@ -70,8 +70,8 @@ element<HTMLFormElement>('add-site').addEventListener('submit', async (event) =>
   input.value = ''
 })
 
-element('open-plexo').addEventListener('click', () => {
-  void api.runtime.sendMessage({ wakePlexo: true }).then(() => setTimeout(renderConnection, 4000))
+element('open-lychee').addEventListener('click', () => {
+  void api.runtime.sendMessage({ wakeLychee: true }).then(() => setTimeout(renderConnection, 4000))
 })
 
 element('version').textContent = `Extension ${api.runtime.getManifest().version}`

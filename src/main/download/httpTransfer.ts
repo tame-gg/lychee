@@ -62,7 +62,7 @@ interface Attempt {
   /** Aborts this request alone; ChunkRuntime.controller aborts the whole stream. */
   abort: AbortController
   abortReason: AbortReason | null
-  /** What the server's answer cost, for diagnosing slow connections (see PLEXO_DEBUG). */
+  /** What the server's answer cost, for diagnosing slow connections (see LYCHEE_DEBUG). */
   response: { ttfbMs: number; reusedSocket: boolean } | null
 }
 
@@ -113,10 +113,10 @@ interface ChunkRuntime {
   retiring: boolean
 }
 
-// Set PLEXO_DEBUG=1 to log every request's outcome, how long the server took to answer and
+// Set LYCHEE_DEBUG=1 to log every request's outcome, how long the server took to answer and
 // whether it reused a warm connection — what it takes to tell one slow connection from a slow path.
-const debug: (...args: unknown[]) => void = process.env['PLEXO_DEBUG']
-  ? (...args) => console.debug('[plexo]', ...args)
+const debug: (...args: unknown[]) => void = process.env['LYCHEE_DEBUG']
+  ? (...args) => console.debug('[lychee]', ...args)
   : () => {}
 
 const MAX_CHUNK_RETRIES = 5

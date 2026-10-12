@@ -22,7 +22,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
-      PLEXO_CHAOS_RUNS: ${{ github.event.inputs.chaos_runs || '50' }}
+      LYCHEE_CHAOS_RUNS: ${{ github.event.inputs.chaos_runs || '50' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -45,18 +45,18 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24 -noreset" npx playwright test
         env:
-          PLEXO_E2E_SKIP_BUILD: '1'
+          LYCHEE_E2E_SKIP_BUILD: '1'
 
       - name: Full suite (Windows)
         if: runner.os == 'Windows'
         run: npx playwright test
         env:
-          PLEXO_E2E_SKIP_BUILD: '1'
+          LYCHEE_E2E_SKIP_BUILD: '1'
 
       - name: Race-prone tests, repeated
         run: ${{ runner.os == 'Linux' && 'xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24 -noreset" ' || '' }}npx playwright test e2e/lifecycle.spec.ts e2e/recovery.spec.ts --repeat-each=10
         env:
-          PLEXO_E2E_SKIP_BUILD: '1'
+          LYCHEE_E2E_SKIP_BUILD: '1'
 
       - name: Upload report
         if: failure()

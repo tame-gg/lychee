@@ -13,12 +13,12 @@ import type { DownloadManager } from './download/downloadManager'
 // In dev mode the app runs as the raw `electron` binary, which otherwise shows "Electron" in
 // the Dock tooltip/menu bar — must be set before the app is ready. Packaged builds already get
 // this from electron-builder's productName, but setting it here keeps dev and packaged in sync.
-app.setName('Plexo')
+app.setName('Lychee')
 
 // Each e2e test runs against its own throwaway userData folder (downloads, manifests, settings).
 if (testKnobs.userDataDir) app.setPath('userData', testKnobs.userDataDir)
 
-// One Plexo at a time (per userData folder, so parallel e2e runs each have their own): a second
+// One Lychee at a time (per userData folder, so parallel e2e runs each have their own): a second
 // launch — a magnet link clicked, a .torrent opened — hands its link to the first and exits.
 if (!app.requestSingleInstanceLock()) app.exit(0)
 
@@ -41,7 +41,7 @@ function offer(candidate: string): void {
   offerLink({ url: link }, app.isReady() ? ensureWindow() : null)
 }
 
-// A plexo:// link from the browser extension arrives here too, with no link in it.
+// A lychee:// link from the browser extension arrives here too, with no link in it.
 app.on('second-instance', (_event, argv) => {
   const link = linkFromArgs(argv)
   if (link) return offer(link)
@@ -65,8 +65,8 @@ if (launchLink) offer(launchLink)
 function titleBarOverlay(): Electron.TitleBarOverlayOptions {
   const dark = nativeTheme.shouldUseDarkColors
   return {
-    color: dark ? '#202325' : '#fafafa',
-    symbolColor: dark ? '#eae7e2' : '#1d1d1f',
+    color: dark ? '#121212' : '#fafafa',
+    symbolColor: dark ? '#f2f2f2' : '#1d1d1f',
     height: 44
   }
 }
@@ -80,10 +80,10 @@ function createWindow(): void {
     minHeight: 620,
     show: false,
     autoHideMenuBar: true,
-    title: 'Plexo',
+    title: 'Lychee',
     // Matches the renderer's dark-mode background so a live window resize
     // (which briefly exposes the raw window background) doesn't flash white.
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
     ...(process.platform !== 'darwin' ? { icon } : {}),
     // One title bar on every OS: the renderer's own strip (see TitleBar.tsx), with the OS's
     // window controls over it — macOS's traffic lights, or the minimize/maximize/close that
@@ -141,16 +141,16 @@ function createWindow(): void {
 }
 
 app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.plexo.app')
+  electronApp.setAppUserModelId('gg.tame.lychee')
 
   // A failed move keeps the old file, to retry next launch — it must never stop the window opening.
   await migrateLegacyNetworkPreferences().catch((error) =>
-    console.error('[plexo] failed to migrate network-preferences.json', error)
+    console.error('[lychee] failed to migrate network-preferences.json', error)
   )
 
-  // The macOS About window (Plexo › About Plexo); its copyright comes from electron-builder.yml.
+  // The macOS About window (Lychee › About Lychee); its copyright comes from electron-builder.yml.
   app.setAboutPanelOptions({
-    credits: 'Developed by Anmol Kapil.\nmacOS code signing provided by Dhananjay Bhosale.'
+    credits: 'A tame.gg project, based on Plexo by Anmol Kapil.'
   })
 
   // Applied before the window is created so the initial background/icon already match —
@@ -165,13 +165,13 @@ app.whenReady().then(async () => {
   void startBridge({
     manager: downloadManager,
     offer: (link) => offerLink(link, ensureWindow())
-  }).catch((error) => console.error('[plexo] browser bridge failed to start', error))
-  // Unlike magnet:, plexo:// is Plexo's own, so registering it takes nothing from another app. A
+  }).catch((error) => console.error('[lychee] browser bridge failed to start', error))
+  // Unlike magnet:, lychee:// is Lychee's own, so registering it takes nothing from another app. A
   // development build has no fixed path to register.
-  if (app.isPackaged) app.setAsDefaultProtocolClient('plexo')
+  if (app.isPackaged) app.setAsDefaultProtocolClient('lychee')
 
   nativeTheme.on('updated', () => {
-    mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#1c1c1e' : '#ffffff')
+    mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff')
     if (process.platform !== 'darwin') mainWindow?.setTitleBarOverlay(titleBarOverlay())
   })
 
@@ -207,13 +207,13 @@ app.on('window-all-closed', () => {
   // Kept running in the tray, so the browser extension can still reach it.
   if (tray) return
   tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
-  tray.setToolTip('Plexo')
+  tray.setToolTip('Lychee')
   tray.on('click', () => bringForward(ensureWindow()))
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Plexo', click: () => bringForward(ensureWindow()) },
+      { label: 'Open Lychee', click: () => bringForward(ensureWindow()) },
       { type: 'separator' },
-      { label: 'Quit Plexo', click: () => app.quit() }
+      { label: 'Quit Lychee', click: () => app.quit() }
     ])
   )
 })

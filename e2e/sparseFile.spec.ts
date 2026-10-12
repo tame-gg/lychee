@@ -7,9 +7,9 @@ import { markSparse } from '../src/main/download/sparseFile'
 
 test('a staging file on NTFS is sparse, so a write far into it zeroes nothing first', async () => {
   test.skip(process.platform !== 'win32', 'NTFS only')
-  const dir = await mkdtemp(join(tmpdir(), 'plexo-sparse-'))
+  const dir = await mkdtemp(join(tmpdir(), 'lychee-sparse-'))
   try {
-    const sparse = join(dir, 'sparse.plexo')
+    const sparse = join(dir, 'sparse.lychee')
     await (await open(sparse, 'wx+')).close()
 
     expect(await markSparse(sparse)).toBe(true)

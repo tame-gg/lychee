@@ -1,4 +1,4 @@
-// webtorrent and parse-torrent ship no types. These cover only what Plexo (and its e2e tests) use.
+// webtorrent and parse-torrent ship no types. These cover only what Lychee (and its e2e tests) use.
 
 declare module 'webtorrent' {
   import type { EventEmitter } from 'node:events'
@@ -15,7 +15,7 @@ declare module 'webtorrent' {
     maxConns?: number
     /** Bytes per second this client uploads at most. */
     uploadLimit?: number
-    /** Added by Plexo's patch (patches/webtorrent+3.0.21.patch): opens every outgoing TCP peer
+    /** Added by Lychee's patch (patches/webtorrent+3.0.21.patch): opens every outgoing TCP peer
      * connection. */
     connect?: (options: { host: string; port: number }) => Socket
   }

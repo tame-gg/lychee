@@ -19,7 +19,7 @@ function invoke<K extends keyof IpcContract>(
   return ipcRenderer.invoke(IpcChannels[channel], ...args)
 }
 
-const plexoApi = {
+const lycheeApi = {
   platform: process.platform,
   // Sync on purpose — see InitialState. One small read, once, before the renderer's first paint.
   initialState: ipcRenderer.sendSync(IpcChannels.getInitialState) as InitialState,
@@ -96,18 +96,18 @@ const plexoApi = {
   }
 }
 
-export type PlexoApi = typeof plexoApi
+export type LycheeApi = typeof lycheeApi
 
-// Nothing in the renderer needs raw Electron/Node access — only the typed plexoApi above is
+// Nothing in the renderer needs raw Electron/Node access — only the typed lycheeApi above is
 // exposed. The @electron-toolkit/preload electronAPI (which hands the renderer an unrestricted
 // ipcRenderer.invoke/send/on on any channel) is deliberately not bridged.
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('plexo', plexoApi)
+    contextBridge.exposeInMainWorld('lychee', lycheeApi)
   } catch (error) {
     console.error(error)
   }
 } else {
   // @ts-ignore (define in dts)
-  window.plexo = plexoApi
+  window.lychee = lycheeApi
 }

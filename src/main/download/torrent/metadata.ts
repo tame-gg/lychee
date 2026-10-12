@@ -9,8 +9,8 @@ import { safeTorrentPaths } from './paths'
 
 /** A .torrent file is metadata only; a link answering with more than this isn't one. */
 const MAX_TORRENT_FILE_BYTES = 10 * 1024 * 1024
-const TOO_LARGE = 'Plexo supports .torrent files up to 10 MB.'
-const V2_ONLY = 'This torrent uses BitTorrent v2 only, which Plexo doesn’t support yet'
+const TOO_LARGE = 'Lychee supports .torrent files up to 10 MB.'
+const V2_ONLY = 'This torrent uses BitTorrent v2 only, which Lychee doesn’t support yet'
 const NO_PEERS = 'No peers responded to this magnet link. Try again later or open a .torrent file.'
 
 /** The .torrent of each torrent probed lately, by info hash: what a download of it starts from,
@@ -34,7 +34,7 @@ export async function describeTorrent(torrentFile: Uint8Array, link: string): Pr
   const parsed = await parseTorrent(torrentFile).catch((error: unknown) => {
     // parse-torrent's check for the v1 piece hashes, which a v2-only torrent doesn't have.
     if (error instanceof Error && error.message.endsWith('info.pieces')) throw new Error(V2_ONLY)
-    throw new Error('This isn’t a torrent Plexo can read')
+    throw new Error('This isn’t a torrent Lychee can read')
   })
   const files = safeTorrentPaths(parsed.files ?? [])
   remember(parsed.infoHash, torrentFile)
@@ -109,7 +109,7 @@ export async function fetchMagnetMetadata(magnet: string): Promise<Uint8Array> {
   current = lookup
   lookup.metadata = new Promise<Uint8Array>((resolve, reject) => {
     // Deselected: only the metadata is wanted, none of the files.
-    const torrent = client.add(magnet, { path: join(tmpdir(), 'plexo-magnet'), deselect: true })
+    const torrent = client.add(magnet, { path: join(tmpdir(), 'lychee-magnet'), deselect: true })
     let done = false
     const finish = (error: Error | null, torrentFile?: Uint8Array): void => {
       if (done) return

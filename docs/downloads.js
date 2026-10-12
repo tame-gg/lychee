@@ -1,5 +1,5 @@
 /*
- * What Plexo's download page and its GitHub Release notes say about each file we ship, and which
+ * What Lychee's download page and its GitHub Release notes say about each file we ship, and which
  * one to put in front of a visitor. Plain ES5 so the page can load it as-is; the release-notes
  * script and the tests load it with require().
  *
@@ -33,11 +33,11 @@
     ],
     win: ['One installer covers both regular (x64) and ARM PCs.'],
     linux: [
-      'AppImage: `chmod +x plexo-*.AppImage`, then run it. Recent Ubuntu needs FUSE 2 first: `sudo apt install libfuse2t64` (older releases call it `libfuse2`) — or use the .deb, which needs nothing extra.',
-      '.deb: `sudo apt install ./plexo_*.deb`.',
-      '.rpm (Fedora / RHEL): `sudo dnf install ./plexo-*.rpm`.',
+      'AppImage: `chmod +x lychee-*.AppImage`, then run it. Recent Ubuntu needs FUSE 2 first: `sudo apt install libfuse2t64` (older releases call it `libfuse2`) — or use the .deb, which needs nothing extra.',
+      '.deb: `sudo apt install ./lychee_*.deb`.',
+      '.rpm (Fedora / RHEL): `sudo dnf install ./lychee-*.rpm`.',
       'Don’t open the AppImage with Disks (it isn’t a disk image — an “image is smaller than the target device” message means it was opened there). Make it executable and run it as above.',
-      'Using more than one network needs Linux kernel 5.7 or newer (any current distro); on older kernels Plexo can only use the default network.'
+      'Using more than one network needs Linux kernel 5.7 or newer (any current distro); on older kernels Lychee can only use the default network.'
     ]
   }
 
@@ -303,7 +303,7 @@
     return out.join('\n')
   }
 
-  root.PlexoDownloads = {
+  root.LycheeDownloads = {
     describe: describe,
     detectEnvironment: detectEnvironment,
     build: build,

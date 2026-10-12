@@ -15,7 +15,7 @@ export async function trashDownload(
   const files = ownedFiles ?? ('downloadedFiles' in download ? download.downloadedFiles : undefined)
   if (!files?.length) {
     throw new Error(
-      'Plexo can’t identify the files in this older torrent. Remove it from the list or manage its files in your file browser.'
+      'Lychee can’t identify the files in this older torrent. Remove it from the list or manage its files in your file browser.'
     )
   }
   const { targets, folders } = await ownedTorrentFiles(download.destinationPath, files)

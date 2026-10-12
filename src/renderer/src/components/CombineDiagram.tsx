@@ -70,7 +70,7 @@ export function CombineDiagram({
               style={
                 muted || paused
                   ? undefined
-                  : { animation: `plexo-dash ${1.1 + index * 0.2}s linear infinite` }
+                  : { animation: `lychee-dash ${1.1 + index * 0.2}s linear infinite` }
               }
             />
           )

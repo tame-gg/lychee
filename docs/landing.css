@@ -419,7 +419,7 @@ a {
   stroke-width: 3;
   stroke-linecap: round;
   stroke-dasharray: 6 8;
-  animation: plexoFlow 1s linear infinite;
+  animation: lycheeFlow 1s linear infinite;
   transition: opacity 0.4s;
 }
 .flow.off {
@@ -440,7 +440,7 @@ a {
 .flow-out.off {
   opacity: 0.2;
 }
-@keyframes plexoFlow {
+@keyframes lycheeFlow {
   to {
     stroke-dashoffset: -30;
   }

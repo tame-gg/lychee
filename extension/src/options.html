@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Plexo extension options</title>
+    <title>Lychee extension options</title>
     <link rel="stylesheet" href="ui.css" />
     <style>
       main {
@@ -24,7 +24,7 @@
       }
       h1 {
         margin: 0;
-        font-size: 20px;
+        font: 400 28px/1 var(--serif);
       }
       h2 {
         margin: 0 0 10px;
@@ -82,7 +82,7 @@
       <header>
         <img src="icons/icon-128.png" alt="" />
         <div class="grow">
-          <h1>Plexo</h1>
+          <h1>Lychee</h1>
           <div class="muted">Extension options</div>
         </div>
       </header>
@@ -94,8 +94,8 @@
             <span class="grow">
               <span class="title">Capture downloads</span>
               <span class="muted"
-                >Every download this browser starts opens in Plexo. If Plexo isn’t open, the browser
-                keeps it.</span
+                >Every download this browser starts opens in Lychee. If Lychee isn’t open, the
+                browser keeps it.</span
               >
             </span>
             <input type="checkbox" role="switch" class="switch" id="capture" />
@@ -125,7 +125,7 @@
           <form class="row" id="add-site" style="flex-direction: column; align-items: stretch">
             <span class="muted"
               >Downloads from these sites and their subdomains stay in the browser. Right-click ›
-              Download with Plexo still works on them.</span
+              Download with Lychee still works on them.</span
             >
             <span style="display: flex; gap: 8px">
               <input
@@ -144,7 +144,7 @@
           </form>
           <ul id="sites"></ul>
           <div class="row muted" id="no-sites" style="border-top: 0.5px solid var(--border)">
-            No sites yet. Every site’s downloads go to Plexo.
+            No sites yet. Every site’s downloads go to Lychee.
           </div>
         </div>
       </section>
@@ -159,15 +159,15 @@
               >
               <span class="mono muted" id="port"></span>
             </span>
-            <button type="button" id="open-plexo" hidden>Open Plexo</button>
+            <button type="button" id="open-lychee" hidden>Open Lychee</button>
           </div>
         </div>
       </section>
 
       <div class="links">
         <span class="mono" id="version"></span>
-        <a href="https://getplexo.app" target="_blank" rel="noreferrer">Website</a>
-        <a href="https://github.com/anmolkapil/plexo" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://tame.gg/projects/lychee" target="_blank" rel="noreferrer">Website</a>
+        <a href="https://github.com/tame-gg/lychee" target="_blank" rel="noreferrer">GitHub</a>
       </div>
     </main>
     <script src="options.js"></script>

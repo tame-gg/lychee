@@ -14,8 +14,8 @@ import {
 } from 'lucide-react'
 import type { ActionId, DownloadItem } from '../utils/downloadActions'
 
-const MAC = window.plexo.platform === 'darwin'
-export const TRASH_NAME = window.plexo.platform === 'win32' ? 'Recycle Bin' : 'Trash'
+const MAC = window.lychee.platform === 'darwin'
+export const TRASH_NAME = window.lychee.platform === 'win32' ? 'Recycle Bin' : 'Trash'
 const REVEAL_LABEL = MAC ? 'Show in Finder' : 'Show in folder'
 
 const SOMETHING_WRONG = 'Something went wrong'

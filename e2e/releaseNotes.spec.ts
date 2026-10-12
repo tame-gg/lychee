@@ -4,24 +4,24 @@ import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const builds = (version: string): string[] => [
-  `plexo-${version}-arm64.AppImage`,
-  `plexo-${version}-arm64.dmg`,
-  `plexo-${version}-setup.exe`,
-  `plexo-${version}-x64.dmg`,
-  `plexo-${version}-x86_64.AppImage`,
-  `plexo-${version}.aarch64.rpm`,
-  `plexo-${version}.x86_64.rpm`,
-  `plexo_${version}_amd64.deb`,
-  `plexo_${version}_arm64.deb`
+  `lychee-${version}-arm64.AppImage`,
+  `lychee-${version}-arm64.dmg`,
+  `lychee-${version}-setup.exe`,
+  `lychee-${version}-x64.dmg`,
+  `lychee-${version}-x86_64.AppImage`,
+  `lychee-${version}.aarch64.rpm`,
+  `lychee-${version}.x86_64.rpm`,
+  `lychee_${version}_amd64.deb`,
+  `lychee_${version}_arm64.deb`
 ]
 
 /** What the app's updater reads besides the downloads (see src/main/updater.ts); the release
  * notes never list them. */
 const updateFiles = (version: string): string[] => [
-  `plexo-${version}-arm64-mac.zip`,
-  `plexo-${version}-x64-mac.zip`,
-  `plexo-${version}-arm64-mac.zip.blockmap`,
-  `plexo-${version}-setup.exe.blockmap`
+  `lychee-${version}-arm64-mac.zip`,
+  `lychee-${version}-x64-mac.zip`,
+  `lychee-${version}-arm64-mac.zip.blockmap`,
+  `lychee-${version}-setup.exe.blockmap`
 ]
 const channelFiles = ['latest.yml', 'latest-mac.yml', 'latest-linux.yml']
 
@@ -40,7 +40,7 @@ function writeChangelog(root: string, versions: string[]): void {
   }))
   writeFileSync(
     join(root, 'docs/changelog.js'),
-    `module.exports.PlexoChangelog = ${JSON.stringify(entries)}\n`
+    `module.exports.LycheeChangelog = ${JSON.stringify(entries)}\n`
   )
 }
 
@@ -67,7 +67,7 @@ test.describe('release artifact selection @smoke', () => {
       const otherBuilds = ['1.0.0-rc.10', '1.0.0-rc.11', '1.0.0', '11.0.0']
         .filter((other) => other !== version)
         .flatMap((other) => [...builds(other), ...updateFiles(other)])
-      const noise = [`plexo_${version}_amd64.snap`]
+      const noise = [`lychee_${version}_amd64.snap`]
       const script = prepareRelease(root, [
         ...expected,
         ...updateFiles(version),
@@ -91,7 +91,7 @@ test.describe('release artifact selection @smoke', () => {
         `## What's new\n\n- **Fixed: Fixes.** What changed in ${version}.\n\n## Downloads`
       )
       for (const file of expected) {
-        const url = `https://github.com/anmolkapil/plexo/releases/download/v${version}/${file}`
+        const url = `https://github.com/tame-gg/lychee/releases/download/v${version}/${file}`
         expect(notes.stdout.split(url + ')')).toHaveLength(2)
       }
       for (const file of [...otherBuilds, ...noise, ...updateFiles(version), ...channelFiles]) {

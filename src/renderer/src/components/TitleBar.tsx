@@ -1,6 +1,6 @@
 import { TITLE_BAR_HEIGHT } from '../theme'
 
-const isMac = window.plexo.platform === 'darwin'
+const isMac = window.lychee.platform === 'darwin'
 
 /** The window's title bar, the same on every OS: its name, centered, on a strip the window is
  * dragged by. The OS's own controls sit over it (see main/index.ts): macOS's traffic lights at
@@ -14,8 +14,8 @@ export function TitleBar(): React.JSX.Element {
         isMac ? 'px-[94px]' : 'px-[140px]'
       }`}
     >
-      <div className="truncate font-sans text-[13px] leading-none font-semibold text-[var(--text-secondary)]">
-        Plexo
+      <div className="truncate font-sans text-[11px] leading-none font-semibold tracking-[0.16em] text-[var(--text-tertiary)] uppercase">
+        Lychee
       </div>
     </div>
   )

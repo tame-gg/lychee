@@ -8,24 +8,24 @@
 ;(function (root) {
   'use strict'
 
-  root.PlexoChangelog = [
+  root.LycheeChangelog = [
     {
       version: 'v1.0.0-rc.15',
       items: [
         {
           kind: 'new',
           title: 'Automatic updates',
-          text: 'New versions download in the background and install when you restart. The update button in the bottom bar shows how far along it is. Turn automatic updates off there, or in the Plexo menu on a Mac.'
+          text: 'New versions download in the background and install when you restart. The update button in the bottom bar shows how far along it is. Turn automatic updates off there, or in the Lychee menu on a Mac.'
         },
         {
           kind: 'new',
           title: 'Scheduled downloads',
-          text: 'Let downloads run only at set times, like overnight, under Networks → Speed & data limits. Outside those times they wait in the queue. Plexo needs to be running for them to start.'
+          text: 'Let downloads run only at set times, like overnight, under Networks → Speed & data limits. Outside those times they wait in the queue. Lychee needs to be running for them to start.'
         },
         {
           kind: 'new',
           title: 'Downloads from your browser',
-          text: 'The Plexo extension for Chrome, Edge and Firefox hands a download to Plexo with your sign-in, so files behind a login download as they do in the browser.'
+          text: 'The Lychee extension for Chrome, Edge and Firefox hands a download to Lychee with your sign-in, so files behind a login download as they do in the browser.'
         },
         {
           kind: 'new',
@@ -40,7 +40,7 @@
         {
           kind: 'fixed',
           title: 'Smaller fixes',
-          text: 'Servers that answered Plexo’s first check with the whole file now download in parallel, and file names sent encoded (like `=?UTF-8?B?…?=`) are saved readable.'
+          text: 'Servers that answered Lychee’s first check with the whole file now download in parallel, and file names sent encoded (like `=?UTF-8?B?…?=`) are saved readable.'
         }
       ]
     },
@@ -60,7 +60,7 @@
         {
           kind: 'new',
           title: 'Speed and data limits',
-          text: 'Set a total speed limit, a limit per network, and Slow mode for calls. Give a network a daily, weekly or monthly data allowance and Plexo stops using it once it is spent.'
+          text: 'Set a total speed limit, a limit per network, and Slow mode for calls. Give a network a daily, weekly or monthly data allowance and Lychee stops using it once it is spent.'
         },
         {
           kind: 'new',
@@ -125,7 +125,7 @@
         {
           kind: 'faster',
           title: 'Picks its own stream count',
-          text: 'Each network starts with 4 streams and Plexo adds more only while they actually add speed, so the streams setting is gone.'
+          text: 'Each network starts with 4 streams and Lychee adds more only while they actually add speed, so the streams setting is gone.'
         },
         {
           kind: 'faster',
@@ -135,7 +135,7 @@
         {
           kind: 'improved',
           title: 'Writes straight to your folder',
-          text: 'Downloads go into a `.plexo` file in the folder you chose and take their real name when they finish, with no copy at the end.'
+          text: 'Downloads go into a `.lychee` file in the folder you chose and take their real name when they finish, with no copy at the end.'
         },
         {
           kind: 'improved',
@@ -145,7 +145,7 @@
         {
           kind: 'improved',
           title: 'Windows installer options',
-          text: 'Choose where Plexo is installed, and whether it adds a desktop shortcut.'
+          text: 'Choose where Lychee is installed, and whether it adds a desktop shortcut.'
         }
       ]
     },
@@ -160,7 +160,7 @@
         {
           kind: 'new',
           title: 'Same-network warning',
-          text: 'Plexo warns you when two selected connections are on the same local network, since Windows only uses one adapter then.'
+          text: 'Lychee warns you when two selected connections are on the same local network, since Windows only uses one adapter then.'
         },
         {
           kind: 'improved',

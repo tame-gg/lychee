@@ -5,7 +5,7 @@ import { networkInterfaces } from 'node:os'
 
 /** The second test "network" is this machine's LAN address, bound as the source of requests to
  * the loopback test server. Most systems route that fine; check once rather than assume, and
- * leave PLEXO_E2E_LAN empty (multi-network tests skip) where it doesn't work. */
+ * leave LYCHEE_E2E_LAN empty (multi-network tests skip) where it doesn't work. */
 async function findLanAddress(): Promise<string> {
   const candidate = Object.values(networkInterfaces())
     .flat()
@@ -31,9 +31,9 @@ async function findLanAddress(): Promise<string> {
 }
 
 /** Tests launch the built app (out/), so build it first — a stale build tests stale code.
- * PLEXO_E2E_SKIP_BUILD=1 skips it when the build is known to be fresh (e.g. a CI step). */
+ * LYCHEE_E2E_SKIP_BUILD=1 skips it when the build is known to be fresh (e.g. a CI step). */
 export default async function globalSetup(): Promise<void> {
-  process.env.PLEXO_E2E_LAN ??= await findLanAddress()
-  if (process.env.PLEXO_E2E_SKIP_BUILD === '1') return
+  process.env.LYCHEE_E2E_LAN ??= await findLanAddress()
+  if (process.env.LYCHEE_E2E_SKIP_BUILD === '1') return
   execSync('npx electron-vite build', { stdio: 'inherit' })
 }

@@ -17,11 +17,11 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const { PlexoDownloads: downloads } = require('../docs/downloads.js')
-const { PlexoChangelog: changelog } = require('../docs/changelog.js')
+const { LycheeDownloads: downloads } = require('../docs/downloads.js')
+const { LycheeChangelog: changelog } = require('../docs/changelog.js')
 
-const REPO = 'anmolkapil/plexo'
-const SITE = 'https://getplexo.app/'
+const REPO = 'tame-gg/lychee'
+const SITE = 'https://tame.gg/projects/lychee/'
 
 const [tag, arg] = process.argv.slice(2)
 if (!tag || !/^v\d/.test(tag)) {
@@ -46,7 +46,7 @@ if (arg === '--changelog') {
 const version = tag.slice(1)
 // RPM names use a dot before the architecture; other builds use a hyphen or underscore.
 const artifactName =
-  /^plexo[-_](.+)(?:[-_](?:setup|x64|x86_64|amd64|arm64)\.[^.]+|\.(?:x86_64|aarch64)\.rpm)$/
+  /^lychee[-_](.+)(?:[-_](?:setup|x64|x86_64|amd64|arm64)\.[^.]+|\.(?:x86_64|aarch64)\.rpm)$/
 const dist = fileURLToPath(new URL('../dist/', import.meta.url))
 const files = readdirSync(dist)
   .filter((name) => name.match(artifactName)?.[1] === version && downloads.describe(name))
