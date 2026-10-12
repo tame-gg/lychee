@@ -1,5 +1,7 @@
 # Lychee
 
+Based on [Plexo](https://github.com/anmolkapil/plexo) by Anmol Kapil, MIT license.
+
 [![Latest release](https://img.shields.io/github/v/release/tame-gg/lychee?include_prereleases&label=release)](https://github.com/tame-gg/lychee/releases)
 [![CI](https://github.com/tame-gg/lychee/actions/workflows/ci.yml/badge.svg)](https://github.com/tame-gg/lychee/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-e8b84a)](LICENSE)

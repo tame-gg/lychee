@@ -150,7 +150,8 @@ app.whenReady().then(async () => {
 
   // The macOS About window (Lychee › About Lychee); its copyright comes from electron-builder.yml.
   app.setAboutPanelOptions({
-    credits: 'A tame.gg project, based on Plexo by Anmol Kapil.'
+    credits:
+      'A tame.gg project. Based on Plexo (https://github.com/anmolkapil/plexo) by Anmol Kapil, MIT license.'
   })
 
   // Applied before the window is created so the initial background/icon already match —
