@@ -63,7 +63,7 @@ A release ships seven files: `Lychee` for macOS (Apple silicon and Intel `.dmg`)
 First bump the version and add its entry at the top of `release/changelog.js`, in one PR. The entry becomes the release notes, and a tag without one stops before building.
 
 ```bash
-npm version <version> --no-git-tag-version     # e.g. 1.0.0-rc.16
+npm version <version> --no-git-tag-version     # e.g. 0.1.1
 # add the v<version> entry to release/changelog.js, open the PR, merge it
 git checkout main && git pull
 git tag v<version> && git push origin v<version>

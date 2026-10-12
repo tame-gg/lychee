@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 const builds = (version: string): string[] => [
@@ -145,4 +145,17 @@ test.describe('release artifact selection @smoke', () => {
       expect(result.stderr).toContain(`No ${version} builds in dist/`)
     })
   }
+})
+
+test('the shipped changelog has an entry for the current version @smoke', () => {
+  const { version } = JSON.parse(readFileSync(resolve(__dirname, '../package.json'), 'utf8'))
+  const run = spawnSync(
+    process.execPath,
+    [resolve(__dirname, '../scripts/release-notes.mjs'), `v${version}`, '--changelog'],
+    { encoding: 'utf8' }
+  )
+  expect(run.status).toBe(0)
+  const out = run.stdout
+  expect(out).toContain('First Lychee release')
+  expect(out).toContain('Plexo by Anmol Kapil')
 })

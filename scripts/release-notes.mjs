@@ -2,11 +2,11 @@
 // Builds a GitHub Release from the files in dist/, so the Releases page describes each file the
 // same way the download page does (both use release/downloads.js).
 //
-//   node scripts/release-notes.mjs v1.0.0-rc.8              the release body: the version's
+//   node scripts/release-notes.mjs v0.1.0                   the release body: the version's
 //                                                          release/changelog.js entry, then the
 //                                                          downloads table
-//   node scripts/release-notes.mjs v1.0.0-rc.8 --files      the files to upload, one per line
-//   node scripts/release-notes.mjs v1.0.0-rc.8 --changelog  just the changelog entry; fails when
+//   node scripts/release-notes.mjs v0.1.0      --files      the files to upload, one per line
+//   node scripts/release-notes.mjs v0.1.0      --changelog  just the changelog entry; fails when
 //                                                          there isn't one
 //
 // The notes describe only files the download page knows how to describe; the upload list adds
@@ -25,7 +25,7 @@ const SITE = 'https://tame.gg/projects/lychee/'
 
 const [tag, arg] = process.argv.slice(2)
 if (!tag || !/^v\d/.test(tag)) {
-  console.error('usage: release-notes.mjs <tag, e.g. v1.0.0-rc.8> [--files | --changelog]')
+  console.error('usage: release-notes.mjs <tag, e.g. v0.1.0> [--files | --changelog]')
   process.exit(2)
 }
 
