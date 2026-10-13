@@ -94,9 +94,10 @@ linux:
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: false
-# Where the app looks for updates. Builds never publish themselves (--publish never): the release
-# workflow uploads them, with the latest*.yml files the updater reads.
+# Where the app looks for updates: the one place the update address is set. electron-builder bakes
+# it into the app (app-update.yml) and writes latest.yml, latest-mac.yml and latest-linux.yml plus
+# the .blockmap files for it. Builds never publish themselves (--publish never): the release
+# workflow uploads them to this folder under these fixed names.
 publish:
-  provider: github
-  owner: tame-gg
-  repo: lychee
+  provider: generic
+  url: https://cdn.tame.gg/lychee/

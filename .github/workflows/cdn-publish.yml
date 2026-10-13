@@ -1,0 +1,109 @@
+name: Publish to the CDN
+
+# Puts a release's files on the CDN folder the app checks (electron-builder.yml's publish url), so
+# installed apps only see a version once its draft release is reviewed and published. The files come
+# from the release itself (release.yml attaches the installers, *.blockmap and every latest*.yml).
+#
+# Publish the release with a real user login: a release published with GITHUB_TOKEN starts no
+# workflows. To publish (or re-publish) one by hand: gh workflow run cdn-publish.yml -f tag=v0.1.0
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  cdn-publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      CDN_SSH_KEY: ${{ secrets.CDN_SSH_KEY }}
+      CDN_HOST: ${{ secrets.CDN_HOST }}
+      CDN_PATH: ${{ secrets.CDN_PATH }}
+      CDN_KNOWN_HOSTS: ${{ secrets.CDN_KNOWN_HOSTS }}
+    steps:
+      # Uploads over rsync + SSH as cdn-ci, with the host key pinned (CDN_KNOWN_HOSTS,
+      # StrictHostKeyChecking=yes). Skipped unless all four CDN secrets are set.
+      - name: Check the CDN secrets
+        id: secrets
+        run: |
+          if [ -n "$CDN_SSH_KEY" ] && [ -n "$CDN_HOST" ] && [ -n "$CDN_PATH" ] && [ -n "$CDN_KNOWN_HOSTS" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CDN_SSH_KEY, CDN_KNOWN_HOSTS, CDN_HOST or CDN_PATH isn't set, so nothing is uploaded to the CDN."
+          fi
+
+      # Pre-releases never reach the live feed; a draft isn't reviewed yet.
+      - name: Check the release is published and not a pre-release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            prerelease="$EVENT_PRERELEASE" draft=false
+          else
+            info=$(gh release view "$TAG" -R tame-gg/lychee --json isPrerelease,isDraft)
+            prerelease=$(jq -r .isPrerelease <<< "$info")
+            draft=$(jq -r .isDraft <<< "$info")
+          fi
+          if [ "$draft" = true ]; then
+            echo "::error::$TAG is still a draft. Publish it first."
+            exit 1
+          elif [ "$prerelease" = true ]; then
+            echo "::notice::$TAG is a pre-release, so it isn't uploaded to the CDN."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download the release's files
+        if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" -R tame-gg/lychee --dir dist \
+            -p '*.dmg' -p '*.zip' -p '*.exe' -p '*.AppImage' -p '*.deb' -p '*.rpm' \
+            -p '*.blockmap' -p 'latest*.yml'
+
+      # An app reading a latest*.yml whose files aren't all there would fail to update.
+      - name: Check every file the latest*.yml files list is here, with a blockmap for Windows/Mac
+        if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
+        working-directory: dist
+        run: |
+          shopt -s nullglob
+          meta=(latest*.yml)
+          test ${#meta[@]} -gt 0 || { echo "::error::No latest*.yml in $TAG."; exit 1; }
+          missing=0
+          for yml in "${meta[@]}"; do
+            grep -qxF "version: ${TAG#v}" "$yml" || { echo "::error::$yml isn't for ${TAG#v}."; missing=1; }
+            for name in $(sed -nE 's/^ *(- url|path): *//p' "$yml" | tr -d "'\"" | sort -u); do
+              [ -f "$name" ] || { echo "::error::$yml lists $name, but it isn't in $TAG."; missing=1; }
+              # Only Windows and Mac builds have blockmaps; AppImage/deb/rpm don't.
+              case "$name" in *.exe|*.dmg|*-mac.zip) [ -f "$name.blockmap" ] || { echo "::error::$name.blockmap isn't in $TAG."; missing=1; } ;; esac
+            done
+          done
+          exit $missing
+
+      - name: Upload to the CDN
+        if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
+        working-directory: dist
+        run: |
+          key="$RUNNER_TEMP/cdn_key"
+          known="$RUNNER_TEMP/cdn_known_hosts"
+          trap 'rm -f "$key" "$known"' EXIT
+          (umask 077 && printenv CDN_SSH_KEY > "$key" && printenv CDN_KNOWN_HOSTS > "$known")
+          chmod 600 "$key"
+          ssh_cmd="ssh -p 22 -l cdn-ci -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known"
+          dest="$CDN_HOST:${CDN_PATH%/}/lychee/"
+          shopt -s nullglob
+          files=(*.dmg *.zip *.exe *.AppImage *.deb *.rpm *.blockmap)
+          meta=(latest*.yml)
+          test ${#files[@]} -gt 0 && test ${#meta[@]} -gt 0
+          rsync -avO --mkpath --chmod=D755,F644 -e "$ssh_cmd" -- "${files[@]}" "$dest"
+          rsync -avO --chmod=D755,F644 -e "$ssh_cmd" -- "${meta[@]}" "$dest"

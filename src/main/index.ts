@@ -198,7 +198,14 @@ app.whenReady().then(async () => {
 
   createWindow()
   if (testKnobs.hideWindow) app.dock?.hide()
-  startUpdater(() => mainWindow, (await loadSettings()).autoUpdate !== false)
+  startUpdater(
+    () => mainWindow,
+    (await loadSettings()).autoUpdate !== false,
+    async () =>
+      (await downloadManager?.listDownloads())?.filter(
+        (d) => d.state.status === 'downloading' || d.state.status === 'queued'
+      ).length ?? 0
+  ).catch((error) => console.error('[lychee] updater failed to start', error))
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
