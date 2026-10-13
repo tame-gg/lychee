@@ -139,7 +139,9 @@ jobs:
         run: |
           node scripts/release-notes.mjs "$TAG" > "$RUNNER_TEMP/notes.md"
           node scripts/release-notes.mjs "$TAG" --files > "$RUNNER_TEMP/files.txt"
-          # Not --prerelease, even for an rc: the app updates to the release GitHub marks Latest,
-          # and a pre-release never is (see src/main/updater.ts).
-          xargs -d '\n' gh release create "$TAG" --draft --title "$TAG" \
+          # -rc/-beta/-alpha tags become pre-releases, which cdn-publish.yml skips; testers get them
+          # from GitHub. Plain vX.Y.Z stays a normal release.
+          pre=()
+          case "$TAG" in *-rc*|*-beta*|*-alpha*) pre=(--prerelease) ;; esac
+          xargs -d '\n' gh release create "$TAG" --draft "${pre[@]}" --title "$TAG" \
             --notes-file "$RUNNER_TEMP/notes.md" < "$RUNNER_TEMP/files.txt"
