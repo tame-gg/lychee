@@ -13,15 +13,19 @@ import {
 } from './ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
 
-/** The selection toolbar's "More actions": what the right-click menu offers for the selection,
- * less what has a button of its own. Same items, names, order and groups. Nothing, when there's
- * nothing to offer. */
+/** "More actions": on the selection toolbar, what the right-click menu offers for the selection,
+ * less what has a button of its own (same items, names, order and groups); on a download's own
+ * screen, the ways out of it. Destructive ones are red here, and only here, and still ask before
+ * they do anything. Nothing, when there's nothing to offer. */
 export function MoreActionsMenu({
   groups,
-  disabled = false
+  disabled = false,
+  size = 'icon-sm'
 }: {
   groups: AvailableAction[][]
   disabled?: boolean
+  /** To sit level with the buttons beside it. */
+  size?: 'icon-sm' | 'icon'
 }): React.JSX.Element | null {
   const { perform } = useDownloadActions()
   if (groups.length === 0) return null
@@ -34,7 +38,7 @@ export function MoreActionsMenu({
               render={
                 <Button
                   type="button"
-                  size="icon-sm"
+                  size={size}
                   variant="secondary"
                   aria-label="More actions"
                   disabled={disabled}

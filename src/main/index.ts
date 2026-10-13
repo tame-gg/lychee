@@ -1,5 +1,5 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon-dark.png?asset'
 // 16px tray icons; nativeImage loads the @2x file next to each on its own.
@@ -11,6 +11,8 @@ import { acceptedLink, bringForward, linkFromArgs, offerLink } from './openLinks
 import { loadSettings, loadThemeSource, migrateLegacyNetworkPreferences } from './settings'
 import { startUpdater } from './updater'
 import { testKnobs } from './testKnobs'
+import { windowSize } from './windowSize'
+import { setInterfaceSize, trackZoom, zoomOn } from './windowZoom'
 import type { DownloadManager } from './download/downloadManager'
 
 // In dev mode the app runs as the raw `electron` binary, which otherwise shows "Electron" in
@@ -29,6 +31,8 @@ let mainWindow: BrowserWindow | null = null
 let downloadManager: DownloadManager | null = null
 let quitAfterSuspending = false
 let tray: Tray | null = null
+/** The window's content zoom (see windowZoom.ts), which the title bar's controls follow. */
+let zoom = 1
 
 /** Only once the app is ready. */
 function ensureWindow(): BrowserWindow {
@@ -64,23 +68,28 @@ const launchLink = linkFromArgs(process.argv)
 if (launchLink) offer(launchLink)
 
 /** The Windows/Linux window controls, in the title bar's colors (main.css's --bg-secondary and
- * --text) for the theme in use, at its height. */
+ * --text) for the theme in use, at its height: TitleBar.tsx's 44px, zoomed with the content. */
 function titleBarOverlay(): Electron.TitleBarOverlayOptions {
   const dark = nativeTheme.shouldUseDarkColors
   return {
     color: dark ? '#121212' : '#fafafa',
     symbolColor: dark ? '#f2f2f2' : '#1d1d1f',
-    height: 44
+    height: Math.round(44 * zoom)
   }
 }
 
+/** The 14px native buttons centered in the renderer's 32px macOS title bar, zoomed with it. */
+function trafficLightPosition(): Electron.Point {
+  return { x: 16, y: Math.round((32 * zoom - 14) / 2) }
+}
+
 function createWindow(): void {
+  const display = screen.getPrimaryDisplay()
+  zoom = zoomOn(display)
   mainWindow = new BrowserWindow({
-    width: 760,
-    height: 640,
-    minWidth: 720,
-    // Room under the download screen's pinned block grid for a network row and a few of its rows.
-    minHeight: 620,
+    // Sized from the display it opens on, in DIPs like the work area itself (see windowSize.ts).
+    // The content's zoom leaves it be: a smaller interface gets more room, not a smaller window.
+    ...windowSize(display.workArea),
     show: false,
     autoHideMenuBar: true,
     title: 'Lychee',
@@ -93,11 +102,11 @@ function createWindow(): void {
     // Windows and Linux draw over the strip's right end.
     titleBarStyle: 'hidden',
     ...(process.platform === 'darwin'
-      ? // Center the 14px native buttons in the renderer’s 32px macOS title bar.
-        { trafficLightPosition: { x: 16, y: 9 } }
+      ? { trafficLightPosition: trafficLightPosition() }
       : { titleBarOverlay: titleBarOverlay() }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      zoomFactor: zoom,
       // A hidden e2e window would otherwise have its timers throttled.
       backgroundThrottling: !testKnobs.hideWindow
     }
@@ -109,6 +118,13 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  const window = mainWindow
+  trackZoom(window, (next) => {
+    zoom = next
+    if (process.platform === 'darwin') window.setWindowButtonPosition(trafficLightPosition())
+    else window.setTitleBarOverlay(titleBarOverlay())
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -160,6 +176,7 @@ app.whenReady().then(async () => {
   // Applied before the window is created so the initial background/icon already match —
   // the saved preference otherwise only takes effect on the next 'updated' event.
   nativeTheme.themeSource = await loadThemeSource()
+  setInterfaceSize((await loadSettings()).interfaceSize ?? 'auto')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

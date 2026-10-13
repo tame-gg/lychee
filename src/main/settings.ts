@@ -89,6 +89,9 @@ function sanitizeSettings(parsed: unknown): AppSettings {
   if (parsed.speedUnit === 'bytes' || parsed.speedUnit === 'bits') {
     settings.speedUnit = parsed.speedUnit
   }
+  if (parsed.interfaceSize === 100 || parsed.interfaceSize === 90 || parsed.interfaceSize === 80) {
+    settings.interfaceSize = parsed.interfaceSize
+  }
   if (parsed.browserExtensionUsed === true) settings.browserExtensionUsed = true
   return settings
 }

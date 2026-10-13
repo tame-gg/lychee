@@ -26,6 +26,7 @@ import { pendingLink, pendingLinks, releaseLink } from '../openLinks'
 import { NetworkMonitor } from '../network/interfaces'
 import { loadSettings, saveSettings } from '../settings'
 import { showUpdateMenu, updateState } from '../updater'
+import { setInterfaceSize } from '../windowZoom'
 
 async function openNetworkSettings(): Promise<void> {
   if (process.platform === 'win32') {
@@ -96,14 +97,16 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
     nativeTheme.themeSource === 'dark' ? 'dark' : 'light'
 
   handle('updateSettings', async (_event, patch) => {
-    // The one setting main also applies — before saving, so a failed write still switches the
+    // The settings main also applies — before saving, so a failed write still switches the
     // window to the theme the toggle now shows.
     if (patch?.themeSource === 'light' || patch?.themeSource === 'dark') {
       nativeTheme.themeSource = patch.themeSource
     }
     await saveSettings(patch)
     // Read back rather than taken from the patch: what was saved is what passed the checks.
-    await manager.applySettings(await loadSettings())
+    const settings = await loadSettings()
+    if (patch && 'interfaceSize' in patch) setInterfaceSize(settings.interfaceSize ?? 'auto')
+    await manager.applySettings(settings)
   })
 
   // Answered via sendSync from the preload, which blocks the page until returnValue is set — so a
@@ -134,6 +137,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         slowMode: settings.slowMode ?? false,
         slowModeSpeed: settings.slowModeSpeed ?? DEFAULT_SLOW_MODE_SPEED,
         speedUnit: settings.speedUnit ?? 'bytes',
+        interfaceSize: settings.interfaceSize ?? 'auto',
         destinationDir: destinationExists ? destinationDir : undefined
       } satisfies InitialState
     } catch (error) {
@@ -147,7 +151,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         downloadsAtOnce: DOWNLOADS_AT_ONCE.default,
         slowMode: false,
         slowModeSpeed: DEFAULT_SLOW_MODE_SPEED,
-        speedUnit: 'bytes'
+        speedUnit: 'bytes',
+        interfaceSize: 'auto'
       } satisfies InitialState
     }
   })

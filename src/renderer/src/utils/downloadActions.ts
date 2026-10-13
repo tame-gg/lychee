@@ -139,7 +139,8 @@ export function rowAction(item: DownloadItem): ActionId | null {
 }
 
 /** The ways out of a download from its own screen, in the order the menu has them: Cancel while
- * it's unfinished; Remove from the list, and moving its file to the Trash, after. */
+ * it's unfinished; Remove from the list, and moving its file to the Trash, after. They're behind
+ * the screen's More menu, so that none of them is a click away from the button beside it. */
 export const MANAGE_ACTIONS: readonly ActionId[] = ['cancel', 'remove', 'trash']
 
 export function manageActions(item: DownloadItem): ActionId[] {
@@ -151,9 +152,18 @@ export function manageAction(item: DownloadItem): ActionId | null {
   return (['cancel', 'remove'] as const).find((id) => appliesTo[id](item)) ?? null
 }
 
-/** What a download's own screen offers beside that: its next steps, in order. */
-export const HEADER_ACTIONS: readonly ActionId[] = [...ROW_ACTIONS, 'open', 'reveal']
+/** A download's own screen's main button, first that applies: its next step (Pause, Resume,
+ * Retry, Fix link, Download again), or for a finished one, showing its file. */
+export const HEADER_PRIMARY: readonly ActionId[] = [...ROW_ACTIONS, 'reveal']
 
-export function headerActions(item: DownloadItem): ActionId[] {
-  return HEADER_ACTIONS.filter((id) => appliesTo[id](item))
+/** And the one button beside it: opening a finished file, or showing one still downloading. */
+export const HEADER_SECONDARY: readonly ActionId[] = ['open', 'reveal']
+
+export function headerActions(item: DownloadItem): {
+  primary: ActionId | null
+  secondary: ActionId | null
+} {
+  const primary = HEADER_PRIMARY.find((id) => appliesTo[id](item)) ?? null
+  const secondary = HEADER_SECONDARY.find((id) => id !== primary && appliesTo[id](item)) ?? null
+  return { primary, secondary }
 }

@@ -103,7 +103,7 @@ export function CompleteScreen({
         </div>
       </HeroBand>
 
-      <div className="mx-5 my-[18px] grid grid-cols-5 overflow-hidden rounded-[10px] border-[0.5px] border-border bg-card">
+      <div className="mx-5 my-[18px] grid shrink-0 grid-cols-5 overflow-hidden rounded-[10px] border-[0.5px] border-border bg-card">
         {[
           { label: 'Size', value: formatBytes(finalSize) },
           { label: 'Time', value: formatDuration(elapsedSeconds) },
