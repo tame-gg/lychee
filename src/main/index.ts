@@ -2,6 +2,9 @@ import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon-dark.png?asset'
+// 16px tray icons; nativeImage loads the @2x file next to each on its own.
+import trayIcon from '../../resources/tray.png?asset'
+import trayTemplateIcon from '../../resources/trayTemplate.png?asset'
 import { registerIpcHandlers } from './ipc/handlers'
 import { keepsRunningForBrowser, startBridge } from './browserBridge'
 import { acceptedLink, bringForward, linkFromArgs, offerLink } from './openLinks'
@@ -202,12 +205,20 @@ app.on('before-quit', (event) => {
   })
 })
 
+/** The tray icon; on macOS a template image (black + alpha) that the menu bar tints itself. */
+function trayImage(): Electron.NativeImage {
+  if (process.platform !== 'darwin') return nativeImage.createFromPath(trayIcon)
+  const image = nativeImage.createFromPath(trayTemplateIcon)
+  image.setTemplateImage(true)
+  return image
+}
+
 app.on('window-all-closed', () => {
   if (process.platform === 'darwin') return
   if (!keepsRunningForBrowser()) return app.quit()
   // Kept running in the tray, so the browser extension can still reach it.
   if (tray) return
-  tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
+  tray = new Tray(trayImage())
   tray.setToolTip('Lychee')
   tray.on('click', () => bringForward(ensureWindow()))
   tray.setContextMenu(
