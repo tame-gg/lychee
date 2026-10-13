@@ -72,7 +72,7 @@ jobs:
             -p '*.blockmap' -p 'latest*.yml'
 
       # An app reading a latest*.yml whose files aren't all there would fail to update.
-      - name: Check every file the latest*.yml files list is here, with its blockmap
+      - name: Check every file the latest*.yml files list is here, with a blockmap for Windows/Mac
         if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
         working-directory: dist
         run: |
@@ -81,11 +81,11 @@ jobs:
           test ${#meta[@]} -gt 0 || { echo "::error::No latest*.yml in $TAG."; exit 1; }
           missing=0
           for yml in "${meta[@]}"; do
-            grep -q "^version: ${TAG#v}$" "$yml" || { echo "::error::$yml isn't for ${TAG#v}."; missing=1; }
+            grep -qxF "version: ${TAG#v}" "$yml" || { echo "::error::$yml isn't for ${TAG#v}."; missing=1; }
             for name in $(sed -nE 's/^ *(- url|path): *//p' "$yml" | tr -d "'\"" | sort -u); do
-              for file in "$name" "$name.blockmap"; do
-                [ -f "$file" ] || { echo "::error::$yml lists $name, but $file isn't in $TAG."; missing=1; }
-              done
+              [ -f "$name" ] || { echo "::error::$yml lists $name, but it isn't in $TAG."; missing=1; }
+              # Only Windows and Mac builds have blockmaps; AppImage/deb/rpm don't.
+              case "$name" in *.exe|*.dmg|*-mac.zip) [ -f "$name.blockmap" ] || { echo "::error::$name.blockmap isn't in $TAG."; missing=1; } ;; esac
             done
           done
           exit $missing
