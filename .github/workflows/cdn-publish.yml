@@ -39,8 +39,31 @@ jobs:
             echo "::notice::CDN_SSH_KEY, CDN_KNOWN_HOSTS, CDN_HOST or CDN_PATH isn't set, so nothing is uploaded to the CDN."
           fi
 
+      # Pre-releases never reach the live feed; a draft isn't reviewed yet.
+      - name: Check the release is published and not a pre-release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            prerelease="$EVENT_PRERELEASE" draft=false
+          else
+            info=$(gh release view "$TAG" -R tame-gg/lychee --json isPrerelease,isDraft)
+            prerelease=$(jq -r .isPrerelease <<< "$info")
+            draft=$(jq -r .isDraft <<< "$info")
+          fi
+          if [ "$draft" = true ]; then
+            echo "::error::$TAG is still a draft. Publish it first."
+            exit 1
+          elif [ "$prerelease" = true ]; then
+            echo "::notice::$TAG is a pre-release, so it isn't uploaded to the CDN."
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download the release's files
-        if: steps.secrets.outputs.ready == 'true'
+        if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -50,7 +73,7 @@ jobs:
 
       # An app reading a latest*.yml whose files aren't all there would fail to update.
       - name: Check every file the latest*.yml files list is here, with its blockmap
-        if: steps.secrets.outputs.ready == 'true'
+        if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
         working-directory: dist
         run: |
           shopt -s nullglob
@@ -68,7 +91,7 @@ jobs:
           exit $missing
 
       - name: Upload to the CDN
-        if: steps.secrets.outputs.ready == 'true'
+        if: steps.secrets.outputs.ready == 'true' && steps.release.outputs.ok == 'true'
         working-directory: dist
         run: |
           key="$RUNNER_TEMP/cdn_key"
