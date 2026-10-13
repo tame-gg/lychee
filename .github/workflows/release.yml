@@ -117,6 +117,36 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
 
+  # PLACEHOLDER: uploads the builds and their latest*.yml / .blockmap files to the CDN folder the
+  # app checks (electron-builder.yml's publish url). Skipped until the CDN_UPLOAD_KEY secret
+  # exists; the uploader account and how the CDN keeps fixed file names are still being decided,
+  # so the step below only lists what it would upload. Upload the latest*.yml files last, so an
+  # app never sees a version whose files aren't there yet.
+  cdn-upload:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      CDN_UPLOAD_KEY: ${{ secrets.CDN_UPLOAD_KEY }}
+    steps:
+      - name: Skip without CDN_UPLOAD_KEY
+        if: env.CDN_UPLOAD_KEY == ''
+        run: echo "::notice::CDN_UPLOAD_KEY isn't set, so nothing is uploaded to the CDN."
+
+      - uses: actions/download-artifact@v4
+        if: env.CDN_UPLOAD_KEY != ''
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload to the CDN (placeholder)
+        if: env.CDN_UPLOAD_KEY != ''
+        run: |
+          # TODO: replace with the real upload once the CDN plan is settled.
+          ls -1 dist | grep -v '^latest' || true
+          ls -1 dist | grep '^latest' || true
+          echo "::warning::CDN upload isn't implemented yet; nothing was uploaded."
+
   release:
     if: github.event_name == 'push'
     needs: build

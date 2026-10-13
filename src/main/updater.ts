@@ -6,12 +6,14 @@ import {
   type BrowserWindow,
   type MenuItemConstructorOptions
 } from 'electron'
+import { execFile } from 'node:child_process'
+import { resolve } from 'node:path'
 import { autoUpdater } from 'electron-updater'
 import { IpcChannels } from '../shared/ipc-channels'
 import type { UpdateState } from '../shared/types'
 import { saveSettings } from './settings'
 
-const CHECK_EVERY_MS = 4 * 60 * 60_000
+const CHECK_EVERY_MS = 6 * 60 * 60_000
 /** Where an update the app couldn't install itself is downloaded from instead. */
 const DOWNLOAD_PAGE = 'https://tame.gg/projects/lychee/'
 
@@ -19,6 +21,20 @@ let state: UpdateState = { status: 'idle', autoUpdate: true }
 let getWindow: () => BrowserWindow | null = () => null
 /** A check asked for from the menu answers even when there's nothing new. */
 let asked = false
+/** Whether this build can install an update itself. Squirrel.Mac only installs an update signed
+ * like the running app, and an ad-hoc signed one (identity "-") matches no other build, so a Mac
+ * build without a Developer ID signature just says an update is out and links the website. */
+let canInstall = process.platform !== 'darwin'
+
+function hasDeveloperId(): Promise<boolean> {
+  // process.execPath is Lychee.app/Contents/MacOS/Lychee.
+  const bundle = resolve(process.execPath, '../../..')
+  return new Promise((done) => {
+    execFile('codesign', ['-dvv', bundle], (error, stdout, stderr) =>
+      done(!error && /^Authority=Developer ID Application/m.test(`${stdout}${stderr}`))
+    )
+  })
+}
 
 export function updateState(): UpdateState {
   return state
@@ -44,6 +60,8 @@ function check(fromMenu = false): void {
   // downloading the whole update again.
   if (status === 'checking' || status === 'downloading' || status === 'ready') return
   if (status === 'error' && !fromMenu) return
+  // Dev and e2e builds aren't packaged and have no app-update.yml to check.
+  if (!app.isPackaged) return
   asked = fromMenu
   // A failure is reported by the 'error' event too. Unpackaged (dev, e2e), this does nothing.
   autoUpdater.checkForUpdates().catch(() => {})
@@ -55,12 +73,12 @@ function download(): void {
 }
 
 function setAutoUpdate(on: boolean): void {
-  autoUpdater.autoDownload = on
+  autoUpdater.autoDownload = on && canInstall
   set({ autoUpdate: on })
   saveSettings({ autoUpdate: on }).catch((error) =>
     console.error('[lychee] failed to save the automatic updates setting', error)
   )
-  if (on && state.status === 'available') download()
+  if (on && canInstall && state.status === 'available') download()
 }
 
 /** The same items in the macOS app menu and in the menu the status bar's update button opens —
@@ -76,6 +94,11 @@ function menuItems(): MenuItemConstructorOptions[] {
     })
   } else if (status === 'downloading') {
     items.push({ label: `Downloading ${version}…`, enabled: false })
+  } else if (status === 'available' && !canInstall) {
+    items.push({
+      label: `Get Lychee ${version} from the Website…`,
+      click: () => void shell.openExternal(DOWNLOAD_PAGE)
+    })
   } else if (status === 'available') {
     items.push({ label: `Download Lychee ${version}`, click: download })
   } else if (status === 'error') {
@@ -134,16 +157,18 @@ function setAppMenu(): void {
   )
 }
 
-/** Checks GitHub Releases now and every few hours (see electron-builder.yml's publish), for the
- * release GitHub marks Latest. A downloaded update installs on restart, or on the next quit if
- * there isn't one. */
-export function startUpdater(window: () => BrowserWindow | null, autoUpdate: boolean): void {
+/** Checks the CDN now and every 6 hours (electron-builder.yml's publish url, fixed latest*.yml
+ * names). A downloaded update installs on restart, or on the next quit if there isn't one. */
+export async function startUpdater(
+  window: () => BrowserWindow | null,
+  autoUpdate: boolean
+): Promise<void> {
   getWindow = window
   state = { ...state, autoUpdate }
-  autoUpdater.autoDownload = autoUpdate
-  // On by default for an rc build, and then it only ever looks for newer rc tags: 1.0.0 would
-  // never reach it. Off, every build follows Latest, whatever its version. A release marked
-  // pre-release on GitHub is never Latest, so it reaches nobody.
+  if (process.platform === 'darwin' && app.isPackaged) canInstall = await hasDeveloperId()
+  autoUpdater.autoDownload = autoUpdate && canInstall
+  // On by default for an rc build, and then it only ever looks for newer rc versions: 1.0.0 would
+  // never reach it. Off, every build follows the latest*.yml on the CDN, whatever its version.
   autoUpdater.allowPrerelease = false
 
   autoUpdater.on('checking-for-update', () => set({ status: 'checking' }))
@@ -162,7 +187,7 @@ export function startUpdater(window: () => BrowserWindow | null, autoUpdate: boo
   autoUpdater.on('update-downloaded', ({ version }) => set({ status: 'ready', version }))
   autoUpdater.on('error', (error) => {
     console.error('[lychee] update failed', error)
-    // Before an update is found (offline, GitHub down) there's nothing to show. After, the
+    // Before an update is found (offline, CDN down) there's nothing to show. After, the
     // website still has it — the way an unsigned Mac build, which can't install it, gets it.
     set({ status: state.version ? 'error' : 'idle' })
     answer('Couldn’t check for updates', 'Check your connection and try again.')

@@ -198,7 +198,9 @@ app.whenReady().then(async () => {
 
   createWindow()
   if (testKnobs.hideWindow) app.dock?.hide()
-  startUpdater(() => mainWindow, (await loadSettings()).autoUpdate !== false)
+  startUpdater(() => mainWindow, (await loadSettings()).autoUpdate !== false).catch((error) =>
+    console.error('[lychee] updater failed to start', error)
+  )
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
