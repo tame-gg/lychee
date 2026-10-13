@@ -1,10 +1,18 @@
 {
-  "name": "plexo",
-  "version": "1.0.0-rc.15",
+  "name": "lychee",
+  "version": "0.1.0",
+  "productName": "Lychee",
   "description": "Speed up downloads by combining multiple network connections in parallel",
   "main": "./out/main/index.js",
   "author": "Anmol Kapil",
-  "homepage": "https://github.com/anmolkapil/plexo",
+  "homepage": "https://tame.gg/projects/lychee",
+  "contributors": [
+    "tame.gg (https://tame.gg)"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tame-gg/lychee.git"
+  },
   "scripts": {
     "format": "prettier --write .",
     "format:check": "prettier --check .",

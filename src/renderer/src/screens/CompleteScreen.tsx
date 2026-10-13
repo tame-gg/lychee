@@ -92,7 +92,7 @@ export function CompleteScreen({
               AVERAGE
             </div>
             <div className="flex items-baseline gap-1.5">
-              <div className="font-mono text-[26px] leading-[0.9] font-semibold tracking-[-0.02em] tabular-nums text-foreground">
+              <div className="font-serif text-[30px] leading-[0.9] font-normal tracking-[-0.01em] tabular-nums text-foreground">
                 {avgSpeedValue}
               </div>
               <div className="font-mono text-[11px] leading-none font-medium text-muted-foreground">

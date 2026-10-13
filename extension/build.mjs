@@ -22,7 +22,7 @@ for (const name of ['background', 'popup', 'options']) {
       lib: {
         entry: join(root, 'src', `${name}.ts`),
         formats: ['iife'],
-        name: 'plexo',
+        name: 'lychee',
         fileName: () => `${name}.js`
       }
     }
@@ -44,7 +44,7 @@ const manifests = {
     background: { scripts: ['background.js'] },
     browser_specific_settings: {
       gecko: {
-        id: 'extension@getplexo.app',
+        id: 'lychee@tame.gg',
         strict_min_version: '121.0',
         // Everything goes to the local app on 127.0.0.1; nothing leaves the device.
         data_collection_permissions: { required: ['none'] }

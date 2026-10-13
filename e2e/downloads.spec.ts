@@ -1,12 +1,8 @@
 import { createRequire } from 'node:module'
-import { resolve } from 'node:path'
-import { _electron as electron, expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
-import { electronArgs } from './fixtures'
-
-// M. The download page: what each file is called, which one a visitor is offered, and that the
-// page says so. The logic lives in docs/downloads.js; the page is checked by loading the real
-// docs/index.html in a hidden window as a visitor with a given browser would see it.
+// M. Release files: what each file is called and which one a visitor is offered. The logic lives
+// in release/downloads.js, which the release-notes script also uses.
 
 interface Asset {
   os: 'mac' | 'win' | 'linux'
@@ -30,7 +26,7 @@ interface Env {
   os: string
   arch: 'arm64' | 'x64' | null
 }
-const D = createRequire(__filename)('../docs/downloads.js').PlexoDownloads as {
+const D = createRequire(__filename)('../release/downloads.js').LycheeDownloads as {
   describe: (name: string) => Omit<Asset, 'file' | 'url' | 'recommended'> | null
   detectEnvironment: (
     nav: { userAgent: string; platform: string; maxTouchPoints?: number },
@@ -43,23 +39,23 @@ const D = createRequire(__filename)('../docs/downloads.js').PlexoDownloads as {
 // What a release actually contains (rc.7's file names), plus what electron-builder leaves lying
 // around in dist/ that must never be offered.
 const SHIPPED = [
-  'plexo-1.0.0-rc.7-arm64.AppImage',
-  'plexo-1.0.0-rc.7-arm64.dmg',
-  'plexo-1.0.0-rc.7-setup.exe',
-  'plexo-1.0.0-rc.7-x64.dmg',
-  'plexo-1.0.0-rc.7-x86_64.AppImage',
-  'plexo_1.0.0-rc.7_amd64.deb',
-  'plexo_1.0.0-rc.7_arm64.deb'
+  'lychee-1.0.0-rc.7-arm64.AppImage',
+  'lychee-1.0.0-rc.7-arm64.dmg',
+  'lychee-1.0.0-rc.7-setup.exe',
+  'lychee-1.0.0-rc.7-x64.dmg',
+  'lychee-1.0.0-rc.7-x86_64.AppImage',
+  'lychee_1.0.0-rc.7_amd64.deb',
+  'lychee_1.0.0-rc.7_arm64.deb'
 ]
 const NOISE = [
   'latest.yml',
   'latest-mac.yml',
-  'plexo-1.0.0-rc.7-arm64.dmg.blockmap',
-  'plexo-1.0.0-rc.7-setup.exe.blockmap',
-  'plexo_1.0.0-rc.7_amd64.snap',
-  'Plexo-1.0.0-rc.4-arm64-mac.zip'
+  'lychee-1.0.0-rc.7-arm64.dmg.blockmap',
+  'lychee-1.0.0-rc.7-setup.exe.blockmap',
+  'lychee_1.0.0-rc.7_amd64.snap',
+  'Lychee-1.0.0-rc.4-arm64-mac.zip'
 ]
-const BASE = 'https://github.com/anmolkapil/plexo/releases/download/v1.0.0-rc.7/'
+const BASE = 'https://github.com/tame-gg/lychee/releases/download/v1.0.0-rc.7/'
 const release = (names: string[] = [...SHIPPED, ...NOISE]): unknown => ({
   tag_name: 'v1.0.0-rc.7',
   prerelease: true,
@@ -123,13 +119,13 @@ const BROWSERS = {
 
 test.describe('what each file is', () => {
   const expected: Record<string, [string, string, string]> = {
-    'plexo-1.0.0-rc.7-arm64.dmg': ['mac', 'arm64', 'Apple silicon'],
-    'plexo-1.0.0-rc.7-x64.dmg': ['mac', 'x64', 'Intel'],
-    'plexo-1.0.0-rc.7-setup.exe': ['win', 'any', 'Windows 10 and 11'],
-    'plexo-1.0.0-rc.7-x86_64.AppImage': ['linux', 'x64', 'AppImage · x86_64'],
-    'plexo-1.0.0-rc.7-arm64.AppImage': ['linux', 'arm64', 'AppImage · ARM64'],
-    'plexo_1.0.0-rc.7_amd64.deb': ['linux', 'x64', 'Debian / Ubuntu · x86_64'],
-    'plexo_1.0.0-rc.7_arm64.deb': ['linux', 'arm64', 'Debian / Ubuntu · ARM64']
+    'lychee-1.0.0-rc.7-arm64.dmg': ['mac', 'arm64', 'Apple silicon'],
+    'lychee-1.0.0-rc.7-x64.dmg': ['mac', 'x64', 'Intel'],
+    'lychee-1.0.0-rc.7-setup.exe': ['win', 'any', 'Windows 10 and 11'],
+    'lychee-1.0.0-rc.7-x86_64.AppImage': ['linux', 'x64', 'AppImage · x86_64'],
+    'lychee-1.0.0-rc.7-arm64.AppImage': ['linux', 'arm64', 'AppImage · ARM64'],
+    'lychee_1.0.0-rc.7_amd64.deb': ['linux', 'x64', 'Debian / Ubuntu · x86_64'],
+    'lychee_1.0.0-rc.7_arm64.deb': ['linux', 'arm64', 'Debian / Ubuntu · ARM64']
   }
 
   for (const [file, [os, arch, title]] of Object.entries(expected)) {
@@ -143,11 +139,11 @@ test.describe('what each file is', () => {
   })
 
   test('a Windows installer with an architecture in its name is described as that one', () => {
-    expect(D.describe('plexo-2.0.0-x64-setup.exe')).toMatchObject({
+    expect(D.describe('lychee-2.0.0-x64-setup.exe')).toMatchObject({
       arch: 'x64',
       title: 'Windows · x64'
     })
-    expect(D.describe('plexo-2.0.0-arm64-setup.exe')).toMatchObject({ arch: 'arm64' })
+    expect(D.describe('lychee-2.0.0-arm64-setup.exe')).toMatchObject({ arch: 'arm64' })
   })
 })
 
@@ -191,17 +187,17 @@ test.describe('which download is offered', () => {
   const offered = (env: Env): string | undefined => D.build(release(), env).primary?.asset.file
 
   test('the right build for every system we can identify', () => {
-    expect(offered({ os: 'win', arch: null })).toBe('plexo-1.0.0-rc.7-setup.exe')
-    expect(offered({ os: 'mac', arch: 'arm64' })).toBe('plexo-1.0.0-rc.7-arm64.dmg')
-    expect(offered({ os: 'mac', arch: 'x64' })).toBe('plexo-1.0.0-rc.7-x64.dmg')
-    expect(offered({ os: 'linux', arch: 'x64' })).toBe('plexo-1.0.0-rc.7-x86_64.AppImage')
-    expect(offered({ os: 'linux', arch: 'arm64' })).toBe('plexo-1.0.0-rc.7-arm64.AppImage')
+    expect(offered({ os: 'win', arch: null })).toBe('lychee-1.0.0-rc.7-setup.exe')
+    expect(offered({ os: 'mac', arch: 'arm64' })).toBe('lychee-1.0.0-rc.7-arm64.dmg')
+    expect(offered({ os: 'mac', arch: 'x64' })).toBe('lychee-1.0.0-rc.7-x64.dmg')
+    expect(offered({ os: 'linux', arch: 'x64' })).toBe('lychee-1.0.0-rc.7-x86_64.AppImage')
+    expect(offered({ os: 'linux', arch: 'arm64' })).toBe('lychee-1.0.0-rc.7-arm64.AppImage')
   })
 
   test('an undecided Mac gets Apple silicon, with the Intel build one click away and a hint', () => {
     const model = D.build(release(), { os: 'mac', arch: null })
     expect(model.primary?.asset.arch).toBe('arm64')
-    expect(model.alternates.map((a) => a.asset.file)).toEqual(['plexo-1.0.0-rc.7-x64.dmg'])
+    expect(model.alternates.map((a) => a.asset.file)).toEqual(['lychee-1.0.0-rc.7-x64.dmg'])
     expect(model.hint).toMatch(/About This Mac/)
   })
 
@@ -215,11 +211,11 @@ test.describe('which download is offered', () => {
 
   test('Linux offers the .deb beside the AppImage, of the same architecture', () => {
     const arm = D.build(release(), { os: 'linux', arch: 'arm64' })
-    expect(arm.alternates.map((a) => a.asset.file)).toEqual(['plexo_1.0.0-rc.7_arm64.deb'])
+    expect(arm.alternates.map((a) => a.asset.file)).toEqual(['lychee_1.0.0-rc.7_arm64.deb'])
     const unknown = D.build(release(), { os: 'linux', arch: null })
     expect(unknown.alternates.map((a) => a.asset.file)).toEqual([
-      'plexo_1.0.0-rc.7_amd64.deb',
-      'plexo-1.0.0-rc.7-arm64.AppImage'
+      'lychee_1.0.0-rc.7_amd64.deb',
+      'lychee-1.0.0-rc.7-arm64.AppImage'
     ])
   })
 
@@ -231,7 +227,7 @@ test.describe('which download is offered', () => {
   })
 
   test('a release missing a platform leaves it out, and a Windows-only visitor still gets the installer', () => {
-    const windowsOnly = release(['plexo-1.0.0-rc.7-setup.exe'])
+    const windowsOnly = release(['lychee-1.0.0-rc.7-setup.exe'])
     expect(D.build(windowsOnly, { os: 'win', arch: null }).primary?.asset.os).toBe('win')
     expect(D.build(windowsOnly, { os: 'mac', arch: null }).primary).toBeNull()
     expect(D.build(windowsOnly, { os: 'mac', arch: null }).groups.map((g) => g.os)).toEqual(['win'])
@@ -246,10 +242,10 @@ test.describe('which download is offered', () => {
       'Linux:4'
     ])
     expect(model.groups[2].rows.map((r) => r.file)).toEqual([
-      'plexo-1.0.0-rc.7-x86_64.AppImage',
-      'plexo_1.0.0-rc.7_amd64.deb',
-      'plexo-1.0.0-rc.7-arm64.AppImage',
-      'plexo_1.0.0-rc.7_arm64.deb'
+      'lychee-1.0.0-rc.7-x86_64.AppImage',
+      'lychee_1.0.0-rc.7_amd64.deb',
+      'lychee-1.0.0-rc.7-arm64.AppImage',
+      'lychee_1.0.0-rc.7_arm64.deb'
     ])
     expect(model.groups.flatMap((g) => g.rows).filter((r) => r.recommended)).toHaveLength(1)
     const guessed = D.build(release(), { os: 'mac', arch: null })
@@ -263,386 +259,13 @@ test.describe('which download is offered', () => {
       size: 100 * 1048576,
       url: BASE + name
     }))
-    const text = D.markdown(files, 'https://getplexo.app/')
+    const text = D.markdown(files, 'https://tame.gg/projects/lychee/')
     for (const name of SHIPPED) expect(text.split(BASE + name + ')')).toHaveLength(2)
     for (const name of NOISE) expect(text).not.toContain(name)
     expect(text).toContain('[Apple silicon]')
-    expect(text).toContain('https://getplexo.app/#downloads')
+    expect(text).toContain('https://tame.gg/projects/lychee/#downloads')
     expect(text).not.toContain('notarized')
   })
 })
 
 // --- the page itself -----------------------------------------------------------------------
-
-async function openPage(
-  browser: { userAgent: string; platform: string; maxTouchPoints?: number },
-  options: { architecture?: 'arm' | 'x86'; releases?: unknown; apiStatus?: number } = {}
-): Promise<{ page: Page; close: () => Promise<void> }> {
-  const app = await electron.launch({
-    args: electronArgs(resolve(__dirname, 'page-host/main.cjs')),
-    env: {
-      ...(process.env as Record<string, string>),
-      PAGE_SCENARIO: JSON.stringify({
-        ...browser,
-        architecture: options.architecture,
-        apiStatus: options.apiStatus ?? 200,
-        releases: options.releases ?? [release()]
-      })
-    }
-  })
-  const page = await app.firstWindow()
-  await page.waitForFunction(
-    () => !document.querySelector('#release-meta')?.textContent?.trim().startsWith('Loading')
-  )
-  return { page, close: () => app.close() }
-}
-
-test.describe('the download page', () => {
-  test('every build is listed under its OS and architecture with a direct link', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows)
-    try {
-      await expect(page.locator('.os-panel .asset-link')).toHaveCount(SHIPPED.length)
-      await expect(page.locator('.os-panel .download-size')).toHaveCount(SHIPPED.length)
-      await expect(page.getByRole('tab', { name: 'Windows' })).toHaveAttribute(
-        'aria-selected',
-        'true'
-      )
-      await expect(page.locator('#primary-btn')).toHaveAttribute('href', BASE + SHIPPED[2])
-      for (const [os, count] of [
-        ['macOS', 2],
-        ['Windows', 1],
-        ['Linux', 4]
-      ] as const) {
-        await page.getByRole('tab', { name: os }).click()
-        const panel = page.getByRole('tabpanel', { name: os })
-        await expect(panel).toBeVisible()
-        await expect(panel.locator('.asset-link')).toHaveCount(count)
-        const hrefs = await panel
-          .locator('.asset-link')
-          .evaluateAll((links) => links.map((link) => (link as HTMLAnchorElement).href))
-        for (const href of hrefs) expect(SHIPPED).toContain(href.split('/').pop())
-        await expect(panel).toContainText(/Download/)
-      }
-      await expect(page.locator('#panel-mac h3')).toHaveText(['Apple silicon', 'Intel'])
-      await expect(page.locator('#panel-linux h3')).toHaveText([
-        'Intel / AMD',
-        'Intel / AMD',
-        'ARM64',
-        'ARM64'
-      ])
-    } finally {
-      await close()
-    }
-  })
-
-  test('uncertain Mac architecture exposes both direct downloads without guessing', async () => {
-    const { page, close } = await openPage(BROWSERS.safariMac)
-    try {
-      await expect(page.locator('#primary-btn')).toHaveAttribute('href', '#downloads')
-      await expect(page.locator('#hero-download-info')).toContainText('can’t identify')
-      await expect(page.locator('#hero-alternates a')).toHaveCount(2)
-      await expect(page.locator('#hero-alternates a').first()).toHaveAttribute(
-        'href',
-        BASE + SHIPPED[1]
-      )
-      await expect(page.locator('#hero-alternates a').last()).toHaveAttribute(
-        'href',
-        BASE + SHIPPED[3]
-      )
-      await page.getByRole('link', { name: 'All downloads' }).click()
-      await expect(page).toHaveURL(/#downloads$/)
-      await expect(page.getByRole('tabpanel', { name: 'macOS' })).toBeVisible()
-    } finally {
-      await close()
-    }
-  })
-
-  test('detected architecture downloads the matching build directly', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeMac, { architecture: 'x86' })
-    try {
-      await expect(page.locator('#primary-btn')).toHaveAttribute('href', BASE + SHIPPED[3])
-      await expect(page.locator('#hero-download-info')).toHaveText(
-        'Intel · Disk image (.dmg) · 93.0 MB · v1.0.0-rc.7'
-      )
-      await expect(page.locator('#hero-alternates a')).toHaveCount(0)
-    } finally {
-      await close()
-    }
-  })
-
-  test('mobile visitors get desktop choices instead of an incompatible direct download', async () => {
-    const { page, close } = await openPage(BROWSERS.iphone)
-    try {
-      await expect(page.locator('#primary-btn')).toHaveAttribute('href', '#downloads')
-      await expect(page.locator('#hero-download-info')).toHaveText(
-        'Apple silicon · Disk image (.dmg) · 91.0 MB · v1.0.0-rc.7'
-      )
-    } finally {
-      await close()
-    }
-  })
-
-  test('each OS retains its installation guidance', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows)
-    try {
-      await page.getByRole('tab', { name: 'macOS' }).click()
-      const mac = page.getByRole('tabpanel', { name: 'macOS' })
-      await expect(mac.locator('.install-help')).toHaveCount(0)
-      await page.getByRole('tab', { name: 'Windows' }).click()
-      await page.getByRole('tabpanel', { name: 'Windows' }).locator('summary').click()
-      await expect(page.getByRole('tabpanel', { name: 'Windows' })).toContainText('Run anyway')
-      await page.getByRole('tab', { name: 'Linux' }).click()
-      const linux = page.getByRole('tabpanel', { name: 'Linux' })
-      await linux.locator('summary').click()
-      await expect(linux).toContainText('libfuse2t64')
-      await expect(linux).toContainText('kernel 5.7')
-      const sectionGuide = await linux.locator('.install-guide-body').textContent()
-      await page.evaluate(() => {
-        document.addEventListener('click', (event) => event.preventDefault(), { once: true })
-      })
-      await linux.locator('.asset-link').first().click()
-      const dialog = page.locator('#install-dialog')
-      await expect(dialog).toBeVisible()
-      expect(await dialog.locator('.install-guide-body').textContent()).toBe(sectionGuide)
-      await expect(dialog.locator('.walkthrough-preview')).toHaveCount(0)
-      await expect(page.locator('#release-meta')).toContainText('Latest pre-release')
-      await expect(page.getByRole('link', { name: 'Previous releases' })).toHaveAttribute(
-        'href',
-        'https://github.com/anmolkapil/plexo/releases'
-      )
-      await expect(page.locator('.release-badge')).toHaveCount(0)
-    } finally {
-      await close()
-    }
-  })
-
-  test('release content and URLs cannot inject executable markup', async () => {
-    const hostile = release([
-      'plexo-<img src=x onerror=document.title=1>-x64.dmg',
-      'plexo-1.0.0-setup.exe'
-    ]) as { tag_name: string; assets: { browser_download_url: string }[] }
-    hostile.tag_name = '<img src=x onerror=document.title=1>'
-    hostile.assets.push({ browser_download_url: 'javascript:alert(1)' })
-    const { page, close } = await openPage(BROWSERS.chromeWindows, { releases: [hostile] })
-    try {
-      await expect(page.locator('#release-meta')).toContainText('<img src=x onerror=')
-      await expect(page.locator('#downloads img')).toHaveCount(0)
-      await expect(page.locator('a[href^="javascript:"]')).toHaveCount(0)
-      await expect(page).toHaveTitle(/Plexo/)
-    } finally {
-      await close()
-    }
-  })
-
-  test('GitHub unreachable retains release links and installation help for every OS', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows, { apiStatus: 500 })
-    try {
-      await expect(page.locator('#release-meta')).toContainText('Couldn’t load')
-      await expect(page.locator('#primary-btn')).toHaveAttribute('href', '#downloads')
-      await expect(page.locator('#panel-win .asset-link')).toHaveAttribute(
-        'href',
-        'https://github.com/anmolkapil/plexo/releases'
-      )
-      await expect(page.locator('#panel-mac .install-help')).toHaveCount(0)
-      for (const os of ['Windows', 'Linux']) {
-        await page.getByRole('tab', { name: os }).click()
-        const panel = page.getByRole('tabpanel', { name: os })
-        await panel.locator('summary').click()
-        await expect(panel.locator('.install-guide-body')).toBeVisible()
-      }
-    } finally {
-      await close()
-    }
-  })
-
-  test('copy confirmation keeps its width and resets after the most recent click', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeMac)
-    try {
-      await page.evaluate(() => {
-        Object.defineProperty(navigator, 'clipboard', {
-          value: {
-            writeText: async (text: string) => {
-              document.body.dataset.copiedCommand = text
-            }
-          }
-        })
-      })
-      await page.locator('#panel-linux summary').click()
-      const button = page.locator('#panel-linux .copy-command').first()
-      const status = page.locator('#panel-linux .command-status').first()
-      await button.click({ trial: true })
-      const width = (await button.boundingBox())?.width
-      await button.click()
-      await expect(button).toHaveText('Copied')
-      expect((await button.boundingBox())?.width).toBe(width)
-      expect(await page.locator('body').getAttribute('data-copied-command')).toBe(
-        await page.locator('#panel-linux code').first().textContent()
-      )
-      await expect(status).toHaveAttribute('role', 'status')
-      await expect(status).toHaveText('Command copied to clipboard.')
-      await page.waitForTimeout(1200)
-      await button.click()
-      await page.waitForTimeout(800)
-      await expect(button).toHaveText('Copied')
-      await expect(button).toHaveText('Copy')
-    } finally {
-      await close()
-    }
-  })
-
-  test('failed or unavailable clipboard access offers manual copying', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeMac)
-    try {
-      await page.locator('#panel-linux summary').click()
-      for (const unavailable of [false, true]) {
-        await page.evaluate((missing) => {
-          Object.defineProperty(navigator, 'clipboard', {
-            configurable: true,
-            value: missing
-              ? undefined
-              : {
-                  writeText: async () => {
-                    throw new Error('Clipboard access denied')
-                  }
-                }
-          })
-        }, unavailable)
-        await page.locator('#panel-linux .copy-command').first().click()
-        const status = page.locator('#panel-linux .command-status').first()
-        await expect(status).toBeVisible()
-        await expect(status).not.toHaveClass(/sr-only/)
-        await expect(status).toHaveText('Couldn’t copy. Select the command and copy it manually.')
-        await expect(page.locator('#panel-linux .copy-command').first()).toHaveText('Copy')
-      }
-    } finally {
-      await close()
-    }
-  })
-
-  test('OS tabs support keyboard navigation', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows)
-    try {
-      const windows = page.getByRole('tab', { name: 'Windows' })
-      await windows.focus()
-      await windows.press('ArrowRight')
-      await expect(page.getByRole('tab', { name: 'Linux' })).toBeFocused()
-      await expect(page.getByRole('tabpanel', { name: 'Linux' })).toBeVisible()
-      await page.getByRole('tab', { name: 'Linux' }).press('Home')
-      await expect(page.getByRole('tab', { name: 'macOS' })).toBeFocused()
-    } finally {
-      await close()
-    }
-  })
-
-  test('navbar highlights the section currently in view', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows)
-    try {
-      const currentLink = (section: string): Locator =>
-        page.locator(`.navlinks a[href="#${section}"]`)
-
-      await expect(page.locator('.navlinks [aria-current="location"]')).toHaveCount(0)
-      await page
-        .locator('#downloads')
-        .evaluate((section) => section.scrollIntoView({ block: 'start' }))
-      await expect(currentLink('downloads')).toHaveAttribute('aria-current', 'location')
-
-      await page.locator('#faq').evaluate((section) => section.scrollIntoView({ block: 'start' }))
-      await expect(currentLink('faq')).toHaveAttribute('aria-current', 'location')
-
-      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
-      await expect(currentLink('support')).toHaveAttribute('aria-current', 'location')
-    } finally {
-      await close()
-    }
-  })
-
-  test('phone and tablet layouts keep the demo and download actions in view', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows)
-    try {
-      await page.setViewportSize({ width: 390, height: 844 })
-      await page.getByRole('tab', { name: 'macOS' }).click()
-      await expect(page.locator('.demo-flow-graphic')).toBeVisible()
-      await expect(page.locator('.demo-chart')).toBeVisible()
-      const flowBounds = await page.locator('.demo-flow-graphic').boundingBox()
-      const totalBounds = await page.locator('.demo-total').boundingBox()
-      const chartBounds = await page.locator('.demo-chart').boundingBox()
-      expect(flowBounds?.x).toBeLessThan(totalBounds?.x ?? 0)
-      expect(totalBounds?.x).toBeLessThan(chartBounds?.x ?? 0)
-      // Classic scrollbars consume viewport width on Linux and Windows. The demo must fill
-      // the space actually available inside the hero, rather than a macOS-specific width.
-      await expect
-        .poll(async () => {
-          const frame = await page.locator('.demo-frame').boundingBox()
-          const stage = await page.locator('.demo-stage').boundingBox()
-          return frame && stage ? Math.abs(frame.width - stage.width) : Infinity
-        })
-        .toBeLessThanOrEqual(1)
-      const demoBounds = await page.locator('.demo-frame').boundingBox()
-      const availableWidth = await page.evaluate(() => document.documentElement.clientWidth)
-      expect(demoBounds!.width).toBeGreaterThan(availableWidth * 0.8)
-      expect(demoBounds!.x).toBeGreaterThanOrEqual(0)
-      expect(demoBounds!.x + demoBounds!.width).toBeLessThanOrEqual(availableWidth)
-      for (const tab of await page.locator('.os-tabs button').all()) {
-        const content = await tab.evaluate((button) => {
-          const buttonRect = button.getBoundingClientRect()
-          const iconRect = button.querySelector('svg')?.getBoundingClientRect()
-          const labelRect = button.querySelector('span')?.getBoundingClientRect()
-          return {
-            left: (iconRect?.left ?? buttonRect.left) - buttonRect.left,
-            right: buttonRect.right - (labelRect?.right ?? buttonRect.right),
-            height: buttonRect.height
-          }
-        })
-        // Font metrics vary by host. Protect usable targets and unclipped content, not a
-        // cosmetic gap measured between the icon/text and the button's edge.
-        expect(content.left).toBeGreaterThanOrEqual(0)
-        expect(content.right).toBeGreaterThanOrEqual(0)
-        expect(content.height).toBeGreaterThanOrEqual(44)
-        await expect(tab).toBeEnabled()
-      }
-      await expect(page.locator('#panel-mac .asset-link')).toHaveCount(2)
-      for (const card of await page.locator('#panel-mac .architecture-card').all()) {
-        const bounds = await card.boundingBox()
-        expect(bounds?.x).toBeGreaterThanOrEqual(0)
-        expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(390)
-      }
-
-      await page.locator('#menu-toggle').click()
-      await expect(page.locator('#mobile-menu')).toBeVisible()
-      expect((await page.locator('#mobile-menu').boundingBox())?.width).toBeGreaterThan(340)
-
-      await page.setViewportSize({ width: 768, height: 1024 })
-      const columns = await page
-        .locator('#features .cells')
-        .first()
-        .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)
-      expect(columns).toBe(2)
-      for (const card of await page.locator('#panel-mac .architecture-card').all()) {
-        const bounds = await card.boundingBox()
-        expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(768)
-      }
-    } finally {
-      await close()
-    }
-  })
-
-  test('network toggles change speed and stop a transfer when both are off', async () => {
-    const { page, close } = await openPage(BROWSERS.chromeWindows)
-    try {
-      await page.getByRole('button', { name: 'Pause demo' }).click()
-      const combined = Number(await page.locator('#total-speed').textContent())
-      await page.getByRole('checkbox', { name: 'Wi-Fi' }).uncheck()
-      await expect(page.locator('#wifi-speed')).toHaveText('0.0 MB/s')
-      expect(Number(await page.locator('#total-speed').textContent())).toBeLessThan(combined)
-      await expect(page.locator('#usb-share')).toHaveText('100%')
-      await page.getByRole('checkbox', { name: 'USB tethering' }).uncheck()
-      await expect(page.locator('#total-speed')).toHaveText('0.0')
-      await expect(page.locator('#time-left')).toHaveText('Waiting for a network')
-      await page.getByRole('checkbox', { name: 'Wi-Fi' }).check()
-      await expect(page.locator('#wifi-share')).toHaveText('100%')
-      await expect(page.locator('#wifi-speed')).not.toHaveText('0.0 MB/s')
-    } finally {
-      await close()
-    }
-  })
-})

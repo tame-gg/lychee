@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Builds a GitHub Release from the files in dist/, so the Releases page describes each file the
-// same way the download page does (both use docs/downloads.js).
+// same way the download page does (both use release/downloads.js).
 //
-//   node scripts/release-notes.mjs v1.0.0-rc.8              the release body: the version's
-//                                                          docs/changelog.js entry, then the
+//   node scripts/release-notes.mjs v0.1.0                   the release body: the version's
+//                                                          release/changelog.js entry, then the
 //                                                          downloads table
-//   node scripts/release-notes.mjs v1.0.0-rc.8 --files      the files to upload, one per line
-//   node scripts/release-notes.mjs v1.0.0-rc.8 --changelog  just the changelog entry; fails when
+//   node scripts/release-notes.mjs v0.1.0      --files      the files to upload, one per line
+//   node scripts/release-notes.mjs v0.1.0      --changelog  just the changelog entry; fails when
 //                                                          there isn't one
 //
 // The notes describe only files the download page knows how to describe; the upload list adds
@@ -17,22 +17,22 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
-const { PlexoDownloads: downloads } = require('../docs/downloads.js')
-const { PlexoChangelog: changelog } = require('../docs/changelog.js')
+const { LycheeDownloads: downloads } = require('../release/downloads.js')
+const { LycheeChangelog: changelog } = require('../release/changelog.js')
 
-const REPO = 'anmolkapil/plexo'
-const SITE = 'https://getplexo.app/'
+const REPO = 'tame-gg/lychee'
+const SITE = 'https://tame.gg/projects/lychee/'
 
 const [tag, arg] = process.argv.slice(2)
 if (!tag || !/^v\d/.test(tag)) {
-  console.error('usage: release-notes.mjs <tag, e.g. v1.0.0-rc.8> [--files | --changelog]')
+  console.error('usage: release-notes.mjs <tag, e.g. v0.1.0> [--files | --changelog]')
   process.exit(2)
 }
 
 const KIND = { new: 'New', faster: 'Faster', improved: 'Improved', fixed: 'Fixed' }
 const entry = changelog.find((candidate) => candidate.version === tag)
 if (!entry) {
-  console.error(`No ${tag} entry in docs/changelog.js — add one, then tag again.`)
+  console.error(`No ${tag} entry in release/changelog.js — add one, then tag again.`)
   process.exit(1)
 }
 const whatsNew =
@@ -46,7 +46,7 @@ if (arg === '--changelog') {
 const version = tag.slice(1)
 // RPM names use a dot before the architecture; other builds use a hyphen or underscore.
 const artifactName =
-  /^plexo[-_](.+)(?:[-_](?:setup|x64|x86_64|amd64|arm64)\.[^.]+|\.(?:x86_64|aarch64)\.rpm)$/
+  /^lychee[-_](.+)(?:[-_](?:setup|x64|x86_64|amd64|arm64)\.[^.]+|\.(?:x86_64|aarch64)\.rpm)$/
 const dist = fileURLToPath(new URL('../dist/', import.meta.url))
 const files = readdirSync(dist)
   .filter((name) => name.match(artifactName)?.[1] === version && downloads.describe(name))

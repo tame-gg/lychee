@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a version tag (git tag v1.0.0-rc.15 && git push origin v1.0.0-rc.15) builds every OS
+# Pushing a version tag (git tag v0.1.0 && git push origin v0.1.0) builds every OS
 # and leaves a draft GitHub Release. Apps only see it once the draft is published.
 #
 # Run by hand (gh workflow run release.yml --ref <branch>) it's a dry run: the same builds, signed
@@ -78,7 +78,7 @@ jobs:
           # electron-builder builds unsigned, quietly, when it finds no identity; such a build could
           # never install an update over a signed one.
           if [ -n "$signed" ]; then
-            for app in dist/mac/Plexo.app dist/mac-arm64/Plexo.app; do
+            for app in dist/mac/Lychee.app dist/mac-arm64/Lychee.app; do
               codesign --verify --deep --strict "$app"
               # -dvv: plain -dv leaves the Authority lines out.
               codesign -dvv "$app" 2>&1 | grep "^Authority=Developer ID Application" > /dev/null

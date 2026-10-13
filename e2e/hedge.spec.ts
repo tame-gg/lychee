@@ -9,7 +9,7 @@ const BLOCKS = 12
 const SLOW = 3 // the block whose first request crawls
 
 test.describe('racing a slow block', () => {
-  test.use({ appEnv: { PLEXO_E2E_HEDGE_MS: '400' } })
+  test.use({ appEnv: { LYCHEE_E2E_HEDGE_MS: '400' } })
 
   const inSlowBlock = (range: OriginRequest['range']): boolean =>
     !!range && range.start >= SLOW * BLOCK && range.start < (SLOW + 1) * BLOCK
@@ -23,7 +23,7 @@ test.describe('racing a slow block', () => {
     }
 
   test('a block crawling at 2 KB/s is finished by a hedge that picks up where it had got to', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: BLOCKS * BLOCK })
@@ -35,8 +35,8 @@ test.describe('racing a slow block', () => {
     )
 
     const started = Date.now()
-    await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-    await plexo.waitForHttpStatus('completed', 10_000)
+    await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+    await lychee.waitForHttpStatus('completed', 10_000)
     expect(Date.now() - started).toBeLessThan(10_000)
 
     const requests = origin.chunkRequests().filter((r) => inSlowBlock(r.range))
@@ -48,15 +48,15 @@ test.describe('racing a slow block', () => {
     ).toBe(true)
   })
 
-  test('the slow holder can win, and then the hedge is dropped', async ({ plexo, serve }) => {
+  test('the slow holder can win, and then the hedge is dropped', async ({ lychee, serve }) => {
     const origin = await serve({ size: BLOCKS * BLOCK })
     // The holder is slowish (about 1.6 s for the block); the hedge is slower still.
     origin.setRule(
       answerRequestsInSlowBlock((n) => (n === 0 ? { crawl: 40_000 } : { crawl: 3000 }))()
     )
 
-    await plexo.start(origin.url(), origin.sha256, { connections: 4 })
-    await plexo.waitForHttpStatus('completed', 10_000)
+    await lychee.start(origin.url(), origin.sha256, { connections: 4 })
+    await lychee.waitForHttpStatus('completed', 10_000)
 
     const requests = origin.chunkRequests().filter((r) => inSlowBlock(r.range))
     expect(requests.length).toBeGreaterThanOrEqual(2)
@@ -65,7 +65,7 @@ test.describe('racing a slow block', () => {
   })
 
   test('paused while racing, then resumed: no half-hedge is left behind', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: BLOCKS * BLOCK })
@@ -75,7 +75,7 @@ test.describe('racing a slow block', () => {
       )()
     )
 
-    const id = await plexo.start(origin.url(), origin.sha256, { connections: 4 })
+    const id = await lychee.start(origin.url(), origin.sha256, { connections: 4 })
     await expect
       .poll(() => origin.chunkRequests().filter((r) => inSlowBlock(r.range)).length, {
         message: 'the hedge started',
@@ -83,16 +83,16 @@ test.describe('racing a slow block', () => {
       })
       .toBeGreaterThanOrEqual(2)
 
-    await plexo.api.pauseDownload(id)
-    const paused = await plexo.waitForHttpStatus('paused')
+    await lychee.api.pauseDownload(id)
+    const paused = await lychee.waitForHttpStatus('paused')
     expect(paused.streams.some((chunk) => chunk.hedge)).toBe(false)
 
-    await plexo.api.resumeDownload(id)
-    await plexo.waitForHttpStatus('completed', 15_000)
+    await lychee.api.resumeDownload(id)
+    await lychee.waitForHttpStatus('completed', 15_000)
   })
 
   test('a second network rescues a block the first is crawling through, and is credited for it', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     test.skip(!LAN_ADDRESS, 'needs a LAN address to act as the second network')
@@ -105,8 +105,8 @@ test.describe('racing a slow block', () => {
       return { crawl: 2000 }
     })
 
-    await plexo.start(origin.url(), origin.sha256, { networks: ['a', 'b'], connections: 1 })
-    const state = await plexo.waitForHttpStatus('completed', 10_000)
+    await lychee.start(origin.url(), origin.sha256, { networks: ['a', 'b'], connections: 1 })
+    const state = await lychee.waitForHttpStatus('completed', 10_000)
 
     const shared = (state.blocks ?? []).filter(
       (block) => (block.bytesByInterface['a'] ?? 0) > 0 && (block.bytesByInterface['b'] ?? 0) > 0

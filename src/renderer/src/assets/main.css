@@ -1,19 +1,29 @@
 @import 'tailwindcss';
 
+/* tame.gg type: the system UI face for text, JetBrains Mono for figures and labels, and
+   Instrument Serif for the large speed readouts. */
 @font-face {
-  font-family: 'Manrope';
+  font-family: 'JetBrains Mono';
   font-style: normal;
-  font-weight: 400 700;
+  font-weight: 400;
   font-display: swap;
-  src: url('./fonts/Manrope-Variable.woff2') format('woff2');
+  src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Roboto Mono';
+  font-family: 'JetBrains Mono';
   font-style: normal;
-  font-weight: 400 600;
+  font-weight: 500 700;
   font-display: swap;
-  src: url('./fonts/RobotoMono-Variable.woff2') format('woff2');
+  src: url('./fonts/JetBrainsMono-Medium.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/InstrumentSerif-Regular.woff2') format('woff2');
 }
 
 :root {
@@ -91,7 +101,8 @@
   --swatch-coral: #c4572a;
   --swatch-coral-onsolid: #ffffff;
 
-  --color-accent: #d97706;
+  /* tame.gg gold, deepened until white text on it (and it as link text on white) clears 4.5:1. */
+  --color-accent: #946a12;
   --color-accent-onsolid: #ffffff;
   --color-success: #1f8a70;
 
@@ -106,16 +117,23 @@
   /* Shared corner radius for shadcn/Base UI components — matches the 8px most hand-styled
      buttons/cards already use (see theme.ts), so new and existing components read as one system. */
   --radius: 8px;
+
+  /* Raised controls (buttons, segmented toggles): a faint top-lit fill over the surface. */
+  --surface: linear-gradient(180deg, #ffffff 0%, #f7f7f8 100%);
+  --popover-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 
-/* Maps shadcn/Base UI's expected semantic tokens onto Plexo's existing palette above, instead of
+/* Maps shadcn/Base UI's expected semantic tokens onto Lychee's existing palette above, instead of
    introducing a second, parallel color system. Tailwind only generates `bg-primary`-style
-   utilities for names declared here, in `@theme` — so this can freely reuse Plexo's own custom
+   utilities for names declared here, in `@theme` — so this can freely reuse Lychee's own custom
    property *values* (e.g. --color-accent) without colliding with their names, since only the
    left-hand names below become Tailwind tokens. */
 @theme inline {
-  --font-sans: 'Manrope', -apple-system, 'SF Pro Text', 'Helvetica Neue', Helvetica, sans-serif;
-  --font-mono: 'Roboto Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  --font-sans:
+    system-ui, -apple-system, Inter, 'SF Pro Text', 'Segoe UI Variable Text', 'Segoe UI', sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  --font-serif: 'Instrument Serif', Georgia, serif;
 
   --color-background: var(--bg);
   --color-foreground: var(--text);
@@ -142,83 +160,88 @@
   --radius-xl: calc(var(--radius) * 1.4);
 }
 
+/* tame.gg's dark instrument palette: near-black surfaces stepped up in small increments, hairline
+   borders, and one bright hue per network. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --hero-bg: linear-gradient(180deg, #202325 0%, #1b1e20 100%);
-    --hero-border: #2b2f33;
-    /* Graphite instrument-panel background — exact hex values from the "Plexo v2" design doc. */
-    --bg: #1b1e20;
-    --bg-secondary: #202325;
-    --bg-tertiary: #202325;
-    --input-bg: #242729;
-    --track-bg: #262a2d;
+    --hero-bg: linear-gradient(180deg, #141414 0%, #0e0e0e 100%);
+    --hero-border: #1e1e1e;
+    --bg: #0a0a0a;
+    --bg-secondary: #121212;
+    --bg-tertiary: #181818;
+    --input-bg: #070707;
+    --track-bg: #202020;
 
-    --text: #eae7e2;
-    --text-secondary: #a9adb2;
-    --text-tertiary: #8d9196;
+    --text: #f2f2f2;
+    --text-secondary: #9e9e9e;
+    /* Lighter than the 42% white of the source palette, so 9-13px text stays above 4.5:1. */
+    --text-tertiary: #8a8a8a;
 
-    --border: #2b2f33;
-    --border-subtle: #23262a;
-    --border-strong: #33383c;
-    --footer-border: #2b2f33;
+    --border: #1e1e1e;
+    --border-subtle: #161616;
+    --border-strong: #2c2c2c;
+    --footer-border: #1e1e1e;
 
-    --icon-muted: #33383c;
-    --icon-muted-strong: #3a3f44;
-    --scrollbar-thumb: #3a3f44;
+    --icon-muted: #2c2c2c;
+    --icon-muted-strong: #383838;
+    --scrollbar-thumb: #2c2c2c;
 
-    --checkbox-shadow: rgba(0, 0, 0, 0.4);
-    --checkbox-inset-shadow: rgba(0, 0, 0, 0.3);
+    --checkbox-shadow: rgba(0, 0, 0, 0.5);
+    --checkbox-inset-shadow: rgba(0, 0, 0, 0.5);
 
-    --color-wifi: #4ea89a;
-    --color-wifi-bg: #22312e;
-    --color-wifi-border: #3a5450;
-    --color-wifi-text: #7fc9bb;
-    --color-wifi-onsolid: #10201d;
+    --surface: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.015));
+    --popover-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 
-    --color-usb: #d8a44c;
-    --color-usb-bg: #33291a;
-    --color-usb-border: #54421f;
-    --color-usb-text: #e8bb6d;
-    --color-usb-onsolid: #221806;
+    --color-wifi: #3fc79f;
+    --color-wifi-bg: #172823;
+    --color-wifi-border: #204c3f;
+    --color-wifi-text: #69d3b4;
+    --color-wifi-onsolid: #0a0a0a;
 
-    --color-ethernet: #7e93bd;
-    --color-ethernet-bg: #232a38;
-    --color-ethernet-border: #3a4660;
-    --color-ethernet-text: #a7b8db;
-    --color-ethernet-onsolid: #141a26;
+    --color-usb: #e9a84a;
+    --color-usb-bg: #2c2419;
+    --color-usb-border: #574224;
+    --color-usb-text: #eebb72;
+    --color-usb-onsolid: #0a0a0a;
 
-    --color-neutral: #8d9196;
-    --color-neutral-bg: #26292c;
-    --color-neutral-border: #3a3f44;
-    --color-neutral-text: #a9adb2;
-    --color-neutral-onsolid: #16181a;
+    --color-ethernet: #5b9cf5;
+    --color-ethernet-bg: #1b232d;
+    --color-ethernet-border: #293e5b;
+    --color-ethernet-text: #7fb2f7;
+    --color-ethernet-onsolid: #0a0a0a;
 
-    --swatch-teal: #4ea89a;
-    --swatch-teal-onsolid: #10201d;
-    --swatch-amber: #d8a44c;
-    --swatch-amber-onsolid: #221806;
-    --swatch-steel: #7e93bd;
-    --swatch-steel-onsolid: #141a26;
-    --swatch-rose: #c97b7b;
-    --swatch-rose-onsolid: #210f0f;
-    --swatch-violet: #9c8fd6;
-    --swatch-violet-onsolid: #17131f;
-    --swatch-lime: #a3c66a;
-    --swatch-lime-onsolid: #161f0d;
-    --swatch-cyan: #6db8c9;
-    --swatch-cyan-onsolid: #0d1a1e;
-    --swatch-coral: #d99168;
-    --swatch-coral-onsolid: #241209;
+    --color-neutral: #8a8a8a;
+    --color-neutral-bg: #202020;
+    --color-neutral-border: #383838;
+    --color-neutral-text: #a4a4a4;
+    --color-neutral-onsolid: #0a0a0a;
 
-    --color-accent: #d8a44c;
-    --color-accent-onsolid: #1b1408;
-    --color-success: #4ea89a;
+    --swatch-teal: #3fc79f;
+    --swatch-teal-onsolid: #0a0a0a;
+    --swatch-amber: #e9a84a;
+    --swatch-amber-onsolid: #0a0a0a;
+    --swatch-steel: #5b9cf5;
+    --swatch-steel-onsolid: #0a0a0a;
+    --swatch-rose: #ef6b93;
+    --swatch-rose-onsolid: #0a0a0a;
+    --swatch-violet: #9a7cf0;
+    --swatch-violet-onsolid: #0a0a0a;
+    --swatch-lime: #8fcf52;
+    --swatch-lime-onsolid: #0a0a0a;
+    --swatch-cyan: #52c9dc;
+    --swatch-cyan-onsolid: #0a0a0a;
+    --swatch-coral: #f28b5c;
+    --swatch-coral-onsolid: #0a0a0a;
 
-    --color-danger: #eda3a3;
-    --color-danger-bg: #2c1c1c;
-    --color-danger-border: #4a2a2a;
+    --color-accent: #e8b84a;
+    --color-accent-onsolid: #0a0a0a;
+    --color-success: #8fcf52;
 
-    --node-accent: #f7f4ef;
+    --color-danger: #ff8a98;
+    --color-danger-bg: #2c1b1d;
+    --color-danger-border: #582a2f;
+
+    --node-accent: #f2f2f2;
   }
 }
 
@@ -262,13 +285,13 @@
   }
 }
 
-@keyframes plexo-dash {
+@keyframes lychee-dash {
   to {
     stroke-dashoffset: -60;
   }
 }
 
-@keyframes plexo-glow {
+@keyframes lychee-glow {
   0%,
   100% {
     opacity: 0.45;
@@ -278,7 +301,7 @@
   }
 }
 
-@keyframes plexo-popover-in {
+@keyframes lychee-popover-in {
   from {
     opacity: 0;
     transform: translateY(-4px) scale(0.97);

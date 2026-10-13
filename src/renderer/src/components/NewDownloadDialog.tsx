@@ -105,7 +105,7 @@ function NewDownloadForm({ onDone }: { onDone: () => void }): React.JSX.Element 
   // managers have long assumed. Anything else on the clipboard is left alone.
   useEffect(() => {
     if (useAppStore.getState().draftUrl) return
-    void window.plexo
+    void window.lychee
       .readClipboardText()
       .then((text) => {
         const link = acceptedLink(text)
@@ -143,7 +143,7 @@ function NewDownloadForm({ onDone }: { onDone: () => void }): React.JSX.Element 
     setProbe({ status: 'probing' })
     const timer = setTimeout(async () => {
       try {
-        const result = await window.plexo.probeUrl(trimmed)
+        const result = await window.lychee.probeUrl(trimmed)
         if (stale) return
         setProbe({ status: 'ready', result })
       } catch (error) {
@@ -243,13 +243,13 @@ function NewDownloadForm({ onDone }: { onDone: () => void }): React.JSX.Element 
   }
 
   const handleBrowse = async (): Promise<void> => {
-    const chosen = await window.plexo.chooseDestinationFolder(destinationDir)
+    const chosen = await window.lychee.chooseDestinationFolder(destinationDir)
     if (chosen) setDestinationDir(chosen)
   }
 
   // A .torrent file goes in the link field as its path; the probe reads it from there.
   const handleOpenTorrent = async (): Promise<void> => {
-    const path = await window.plexo.chooseTorrentFile()
+    const path = await window.lychee.chooseTorrentFile()
     if (path) setUrl(path)
   }
 
@@ -260,7 +260,7 @@ function NewDownloadForm({ onDone }: { onDone: () => void }): React.JSX.Element 
     setStarting(true)
     setStartError(null)
     try {
-      await window.plexo.resumeFromLink(link.id, resumes.id)
+      await window.lychee.resumeFromLink(link.id, resumes.id)
       useAppStore.setState({ view: { name: 'download', id: resumes.id } })
       finishLink(link.id, true)
     } catch (error) {
@@ -287,7 +287,7 @@ function NewDownloadForm({ onDone }: { onDone: () => void }): React.JSX.Element 
         etag: probe.result.etag,
         lastModified: probe.result.lastModified
       }
-      const id = await window.plexo.startDownload(
+      const id = await window.lychee.startDownload(
         probe.result.kind === 'torrent'
           ? {
               ...common,

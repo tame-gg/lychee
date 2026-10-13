@@ -4,6 +4,7 @@ import { useAppStore } from '../store/useAppStore'
 import { formatBytes } from '../utils/format'
 import { useFormatSpeedLimit } from '../hooks/useFormatSpeed'
 import { useDownloadSchedule } from '../hooks/useDownloadSchedule'
+import { AboutPopover } from './AboutPopover'
 import { ScreenFooter } from './ScreenFooter'
 import { ThemeToggle } from './ThemeToggle'
 import { Switch } from './ui/switch'
@@ -69,7 +70,7 @@ export function StatusBar(): React.JSX.Element {
   useEffect(() => {
     let disposed = false
     const load = (): void => {
-      void window.plexo
+      void window.lychee
         .freeSpace(destinationDir)
         .then((bytes) => !disposed && setFree(bytes))
         .catch(() => {})
@@ -108,6 +109,7 @@ export function StatusBar(): React.JSX.Element {
         </Tooltip>
         <SpeedUnitToggle />
         <ThemeToggle />
+        <AboutPopover />
       </div>
     </ScreenFooter>
   )

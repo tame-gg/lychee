@@ -8,7 +8,7 @@ import type { Torrent } from 'webtorrent'
 import { expect, test } from './fixtures'
 import { seededBytes } from './origin'
 
-// Getting a torrent in: every way in gives the same answer, and a torrent Plexo can't save
+// Getting a torrent in: every way in gives the same answer, and a torrent Lychee can't save
 // safely is refused before anything is written. Peers come from the link itself (x.pe), so no
 // tracker or DHT is involved.
 
@@ -54,13 +54,13 @@ test.afterEach(async () => {
 })
 
 test.describe('getting a torrent in', () => {
-  test('a link to a .torrent', async ({ plexo }) => {
+  test('a link to a .torrent', async ({ lychee }) => {
     const { client, torrent } = await seed([named(seededBytes(300_000, 1), 'movie.mkv')])
     clients.push(client)
     const { url, server } = await serveTorrent(torrent.torrentFile)
     servers.push(server)
 
-    const probe = await plexo.api.probeUrl(url)
+    const probe = await lychee.api.probeUrl(url)
     expect(probe.kind).toBe('torrent')
     if (probe.kind !== 'torrent') throw new Error('Expected torrent metadata')
     expect(probe.torrent.infoHash).toBe(torrent.infoHash)
@@ -69,16 +69,16 @@ test.describe('getting a torrent in', () => {
     expect(probe.torrent.files).toEqual([{ path: 'movie.mkv', length: 300_000 }])
   })
 
-  test('a .torrent file on this computer, with a folder of files', async ({ plexo }) => {
+  test('a .torrent file on this computer, with a folder of files', async ({ lychee }) => {
     const { client, torrent } = await seed(
       [named(seededBytes(1000, 2), 'a.bin'), named(seededBytes(2000, 3), 'b.bin')],
       'Album'
     )
     clients.push(client)
-    const path = join(await mkdtemp(join(tmpdir(), 'plexo-torrent-')), 'album.torrent')
+    const path = join(await mkdtemp(join(tmpdir(), 'lychee-torrent-')), 'album.torrent')
     await writeFile(path, torrent.torrentFile)
 
-    const probe = await plexo.api.probeUrl(path)
+    const probe = await lychee.api.probeUrl(path)
     expect(probe.kind).toBe('torrent')
     if (probe.kind !== 'torrent') throw new Error('Expected torrent metadata')
     expect(probe.suggestedFileName).toBe('Album')
@@ -89,12 +89,12 @@ test.describe('getting a torrent in', () => {
     ])
   })
 
-  test('a magnet link, its details fetched from a peer', async ({ plexo }) => {
+  test('a magnet link, its details fetched from a peer', async ({ lychee }) => {
     const { client, torrent } = await seed([named(seededBytes(500_000, 4), 'show.mp4')])
     clients.push(client)
     const magnet = `${torrent.magnetURI}&x.pe=127.0.0.1:${client.address().port}`
 
-    const probe = await plexo.api.probeUrl(magnet)
+    const probe = await lychee.api.probeUrl(magnet)
     expect(probe.kind).toBe('torrent')
     if (probe.kind !== 'torrent') throw new Error('Expected torrent metadata')
     expect(probe.torrent.infoHash).toBe(torrent.infoHash)
@@ -102,7 +102,7 @@ test.describe('getting a torrent in', () => {
     expect(probe.totalBytes).toBe(500_000)
   })
 
-  test('two files that would be saved as one are refused', async ({ plexo }) => {
+  test('two files that would be saved as one are refused', async ({ lychee }) => {
     const { client, torrent } = await seed(
       [named(seededBytes(10, 5), 'Read.txt'), named(seededBytes(10, 6), 'read.txt')],
       'Docs'
@@ -111,10 +111,10 @@ test.describe('getting a torrent in', () => {
     const { url, server } = await serveTorrent(torrent.torrentFile)
     servers.push(server)
 
-    await expect(plexo.api.probeUrl(url)).rejects.toThrow(/saved as the same file/)
+    await expect(lychee.api.probeUrl(url)).rejects.toThrow(/saved as the same file/)
   })
 
-  test('a v2-only torrent is refused', async ({ plexo }) => {
+  test('a v2-only torrent is refused', async ({ lychee }) => {
     // BEP 52: a file tree and per-file piece roots, but none of the v1 piece hashes.
     const v2Only = (await loadBencode()).encode({
       info: {
@@ -127,15 +127,15 @@ test.describe('getting a torrent in', () => {
     const { url, server } = await serveTorrent(v2Only)
     servers.push(server)
 
-    await expect(plexo.api.probeUrl(url)).rejects.toThrow(/BitTorrent v2 only/)
+    await expect(lychee.api.probeUrl(url)).rejects.toThrow(/BitTorrent v2 only/)
   })
 
   test.describe('with nobody to ask', () => {
-    test.use({ appEnv: { PLEXO_E2E_MAGNET_MS: '1500' } })
+    test.use({ appEnv: { LYCHEE_E2E_MAGNET_MS: '1500' } })
 
-    test('a magnet link nobody answers gives up', async ({ plexo }) => {
+    test('a magnet link nobody answers gives up', async ({ lychee }) => {
       const magnet = `magnet:?xt=urn:btih:${'ab'.repeat(20)}&dn=nothing`
-      await expect(plexo.api.probeUrl(magnet)).rejects.toThrow(
+      await expect(lychee.api.probeUrl(magnet)).rejects.toThrow(
         /No peers responded to this magnet link/
       )
     })

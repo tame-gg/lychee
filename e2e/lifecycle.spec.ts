@@ -15,37 +15,37 @@ test.describe('pause and resume @smoke', () => {
     ['exactly on a block boundary', 8 * BLOCK]
   ]
   for (const [label, offset] of points) {
-    test(`pause ${label}, then resume`, async ({ plexo, serve }) => {
+    test(`pause ${label}, then resume`, async ({ lychee, serve }) => {
       const origin = await serve({ size: SIZE })
       const reached = origin.hold(offset)
-      const id = await plexo.start(origin.url(), origin.sha256, { connections: 2 })
+      const id = await lychee.start(origin.url(), origin.sha256, { connections: 2 })
       await reached
 
-      await plexo.api.pauseDownload(id)
-      const paused = await plexo.waitForHttpStatus('paused')
+      await lychee.api.pauseDownload(id)
+      const paused = await lychee.waitForHttpStatus('paused')
       expect(paused.speedBytesPerSec).toBe(0)
       origin.release()
 
-      await plexo.api.resumeDownload(id)
-      await plexo.waitForHttpStatus('completed')
+      await lychee.api.resumeDownload(id)
+      await lychee.waitForHttpStatus('completed')
     })
   }
 
-  test('rapid pause/resume, 20 times', async ({ plexo, serve }) => {
+  test('rapid pause/resume, 20 times', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE })
     const reached = origin.hold(6 * BLOCK + 10)
-    const id = await plexo.start(origin.url(), origin.sha256, { connections: 4 })
+    const id = await lychee.start(origin.url(), origin.sha256, { connections: 4 })
     await reached
     for (let i = 0; i < 20; i++) {
-      await plexo.api.pauseDownload(id)
-      await plexo.api.resumeDownload(id)
+      await lychee.api.pauseDownload(id)
+      await lychee.api.resumeDownload(id)
     }
     origin.release()
-    await plexo.waitForHttpStatus('completed')
+    await lychee.waitForHttpStatus('completed')
   })
 
   test('resuming while a paused stream is still winding down waits for it, not runs beside it', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: SIZE, bytesPerSecond: 256 * 1024 })
@@ -71,48 +71,48 @@ test.describe('pause and resume @smoke', () => {
       return 'stallHeaders'
     })
 
-    const id = await plexo.start(origin.url(), origin.sha256)
+    const id = await lychee.start(origin.url(), origin.sha256)
     await expect.poll(() => stalled, { message: 'the sample request hung' }).toBe(true)
-    const pausing = plexo.api.pauseDownload(id)
-    await plexo.waitForHttpStatus('paused')
-    await plexo.api.resumeDownload(id)
+    const pausing = lychee.api.pauseDownload(id)
+    await lychee.waitForHttpStatus('paused')
+    await lychee.api.resumeDownload(id)
     await pausing
     // Two runs side by side would each try to finish the download, and the one left behind would
     // call it failed.
-    await plexo.waitForHttpStatus('completed', 30_000)
+    await lychee.waitForHttpStatus('completed', 30_000)
   })
 })
 
 test.describe('pause during a retry backoff', () => {
-  test.use({ appEnv: { PLEXO_E2E_RETRY_BASE_MS: '5000' } })
+  test.use({ appEnv: { LYCHEE_E2E_RETRY_BASE_MS: '5000' } })
 
-  test('pausing does not wait out the backoff @smoke', async ({ plexo, serve }) => {
+  test('pausing does not wait out the backoff @smoke', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE })
     let failing = true
     origin.setRule(({ range }) =>
       failing && range && range.start === 4 * BLOCK ? { status: 500 } : 'ok'
     )
-    const id = await plexo.start(origin.url(), origin.sha256, { connections: 2 })
-    await plexo.waitUntil(
+    const id = await lychee.start(origin.url(), origin.sha256, { connections: 2 })
+    await lychee.waitUntil(
       (state) =>
         state.kind === 'http' && state.streams.some((stream) => stream.status === 'retrying')
     )
 
     const before = Date.now()
-    await plexo.api.pauseDownload(id)
-    await plexo.waitForHttpStatus('paused', 2000)
+    await lychee.api.pauseDownload(id)
+    await lychee.waitForHttpStatus('paused', 2000)
     expect(Date.now() - before).toBeLessThan(2000)
 
     failing = false
-    await plexo.api.resumeDownload(id)
-    await plexo.waitForHttpStatus('completed')
+    await lychee.api.resumeDownload(id)
+    await lychee.waitForHttpStatus('completed')
   })
 })
 
 test.describe('resume safety checks @smoke', () => {
   /** Starts a download, pauses it partway, and lets `change` alter the server while paused. */
   async function pauseThenChange(
-    plexo: import('./fixtures').PlexoApp,
+    lychee: import('./fixtures').LycheeApp,
     origin: import('./origin').Origin,
     change: () => void
   ): Promise<{
@@ -121,36 +121,36 @@ test.describe('resume safety checks @smoke', () => {
     paused: import('../src/shared/types').HttpDownloadState
   }> {
     const reached = origin.hold(5 * BLOCK)
-    const id = await plexo.start(origin.url(), origin.sha256)
+    const id = await lychee.start(origin.url(), origin.sha256)
     await reached
-    await plexo.api.pauseDownload(id)
-    const paused = await plexo.waitForHttpStatus('paused')
+    await lychee.api.pauseDownload(id)
+    const paused = await lychee.waitForHttpStatus('paused')
     change()
     origin.release()
     const resumedAt = origin.log.length
-    await plexo.api.resumeDownload(id)
+    await lychee.api.resumeDownload(id)
     return { id, resumedAt, paused }
   }
 
   test('a new version published while paused (new ETag) → error, nothing kept', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: SIZE })
-    await pauseThenChange(plexo, origin, () => origin.setContent(seededBytes(SIZE, 9), '"v2"'))
-    const state = await plexo.waitForHttpStatus('error')
+    await pauseThenChange(lychee, origin, () => origin.setContent(seededBytes(SIZE, 9), '"v2"'))
+    const state = await lychee.waitForHttpStatus('error')
     expect(state.error).toMatch(/changed/)
   })
 
   test('same bytes under a new ETag while paused (server migrated) → resumes, progress kept', async ({
-    plexo,
+    lychee,
     serve
   }) => {
     const origin = await serve({ size: SIZE })
-    const { resumedAt, paused } = await pauseThenChange(plexo, origin, () =>
+    const { resumedAt, paused } = await pauseThenChange(lychee, origin, () =>
       origin.setContent(origin.content, '"migrated"')
     )
-    await plexo.waitForHttpStatus('completed')
+    await lychee.waitForHttpStatus('completed')
 
     // Kept, not restarted: after resuming, no block that was already complete was fetched again
     // — only the small samples that confirmed the bytes match.
@@ -166,68 +166,68 @@ test.describe('resume safety checks @smoke', () => {
     )
   })
 
-  test('no validators at all → resumes', async ({ plexo, serve }) => {
+  test('no validators at all → resumes', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE, etag: null, lastModified: null })
     const reached = origin.hold(5 * BLOCK)
-    const id = await plexo.start(origin.url(), origin.sha256)
+    const id = await lychee.start(origin.url(), origin.sha256)
     await reached
-    await plexo.api.pauseDownload(id)
-    await plexo.waitForHttpStatus('paused')
+    await lychee.api.pauseDownload(id)
+    await lychee.waitForHttpStatus('paused')
     origin.release()
-    await plexo.api.resumeDownload(id)
-    await plexo.waitForHttpStatus('completed')
+    await lychee.api.resumeDownload(id)
+    await lychee.waitForHttpStatus('completed')
   })
 
-  test('resume against a server without range support', async ({ plexo, serve }) => {
+  test('resume against a server without range support', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE, ranges: false })
     const reached = origin.hold(5 * BLOCK)
-    const id = await plexo.start(origin.url(), origin.sha256)
+    const id = await lychee.start(origin.url(), origin.sha256)
     await reached
-    await plexo.api.pauseDownload(id)
-    await plexo.waitForHttpStatus('paused')
+    await lychee.api.pauseDownload(id)
+    await lychee.waitForHttpStatus('paused')
     origin.release()
-    await plexo.api.resumeDownload(id)
-    await plexo.waitForHttpStatus('completed', 10_000)
+    await lychee.api.resumeDownload(id)
+    await lychee.waitForHttpStatus('completed', 10_000)
   })
 })
 
 test.describe('cancel and remove @smoke', () => {
-  test('cancel while paused', async ({ plexo, serve }) => {
+  test('cancel while paused', async ({ lychee, serve }) => {
     const origin = await serve({ size: SIZE })
     const reached = origin.hold(7 * BLOCK)
-    const id = await plexo.start(origin.url(), origin.sha256)
+    const id = await lychee.start(origin.url(), origin.sha256)
     await reached
-    await plexo.api.pauseDownload(id)
-    const paused = await plexo.waitForHttpStatus('paused')
-    const staging = `${paused.destinationPath}.plexo`
+    await lychee.api.pauseDownload(id)
+    const paused = await lychee.waitForHttpStatus('paused')
+    const staging = `${paused.destinationPath}.lychee`
     expect(existsSync(staging), 'pausing keeps the staging file').toBe(true)
     origin.release()
-    await plexo.api.cancelDownload(id)
-    await plexo.waitForHttpStatus('cancelled')
+    await lychee.api.cancelDownload(id)
+    await lychee.waitForHttpStatus('cancelled')
     await expect.poll(() => existsSync(staging), { message: 'cancelling removes it' }).toBe(false)
   })
 
-  test('remove after completion keeps the file', async ({ plexo, serve, dirs }) => {
+  test('remove after completion keeps the file', async ({ lychee, serve, dirs }) => {
     const origin = await serve({ size: SIZE })
-    const id = await plexo.start(origin.url(), origin.sha256)
-    const state = await plexo.waitForHttpStatus('completed')
-    await plexo.api.removeDownload(id)
+    const id = await lychee.start(origin.url(), origin.sha256)
+    const state = await lychee.waitForHttpStatus('completed')
+    await lychee.api.removeDownload(id)
 
-    expect(await plexo.currentHttp()).toBeNull()
+    expect(await lychee.currentHttp()).toBeNull()
     expect(sha256(await readFile(state.destinationPath))).toBe(origin.sha256)
     await expect.poll(() => existsSync(join(dirs.userData, 'downloads', id))).toBe(false)
   })
 
-  test('remove while downloading deletes everything', async ({ plexo, serve, dirs }) => {
+  test('remove while downloading deletes everything', async ({ lychee, serve, dirs }) => {
     const origin = await serve({ size: SIZE })
     const reached = origin.hold(7 * BLOCK)
-    const id = await plexo.start(origin.url(), origin.sha256)
+    const id = await lychee.start(origin.url(), origin.sha256)
     await reached
-    const { destinationPath } = (await plexo.currentHttp())!
-    await plexo.api.removeDownload(id)
+    const { destinationPath } = (await lychee.currentHttp())!
+    await lychee.api.removeDownload(id)
     origin.release()
 
-    expect(await plexo.currentHttp()).toBeNull()
+    expect(await lychee.currentHttp()).toBeNull()
     await expect.poll(() => existsSync(destinationPath)).toBe(false)
     await expect.poll(() => existsSync(join(dirs.userData, 'downloads', id))).toBe(false)
   })

@@ -111,7 +111,7 @@ export function TorrentFiles({
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let stale = false
-    void window.plexo.torrentFiles(downloadId).then((entries) => {
+    void window.lychee.torrentFiles(downloadId).then((entries) => {
       if (!stale) setFiles(entries)
     })
     return () => {
@@ -130,7 +130,7 @@ export function TorrentFiles({
     }
     setError(null)
     const chosen = files.flatMap((_, index) => (next.includes(index) ? [] : [index]))
-    window.plexo
+    window.lychee
       .chooseTorrentFiles(downloadId, chosen)
       .catch((cause) => setError(describeError(cause)))
   }

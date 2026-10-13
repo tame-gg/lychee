@@ -114,7 +114,7 @@ export class TorrentDestination extends DownloadFile {
       return
     }
     if (!this.owned.length)
-      throw new Error('Plexo can’t identify this torrent’s files for removal.')
+      throw new Error('Lychee can’t identify this torrent’s files for removal.')
     const files = this.owned.map((path) => path.split(/[\\/]/).slice(1).join(sep))
     const { targets, folders } = await ownedTorrentFiles(this.path, files)
     for (const target of targets) await rm(target, { force: true })

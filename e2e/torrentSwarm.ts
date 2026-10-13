@@ -65,7 +65,7 @@ export class Swarm {
     // A folder of its own, as leech() has: left to webtorrent, every seeder shares /tmp/webtorrent,
     // and two tests seeding different files under one name in parallel overwrite each other's —
     // the seeder then serves pieces that fail verification, forever.
-    const path = await mkdtemp(join(tmpdir(), 'plexo-seed-'))
+    const path = await mkdtemp(join(tmpdir(), 'lychee-seed-'))
     return new Promise((resolve) =>
       client.seed(
         files.length === 1 ? files[0] : files,
@@ -78,7 +78,7 @@ export class Swarm {
   /** A client fetching `torrent` from the swarm, into a folder of its own. */
   async leech(torrent: Torrent): Promise<Torrent> {
     const client = await this.client()
-    const path = await mkdtemp(join(tmpdir(), 'plexo-leech-'))
+    const path = await mkdtemp(join(tmpdir(), 'lychee-leech-'))
     return client.add(torrent.torrentFile, { path })
   }
 
@@ -99,7 +99,7 @@ export class Swarm {
 
 /** `torrent`'s .torrent, written to a file for the app to open. */
 export async function torrentFileOnDisk(torrent: Torrent): Promise<string> {
-  const path = join(await mkdtemp(join(tmpdir(), 'plexo-torrent-')), `${torrent.name}.torrent`)
+  const path = join(await mkdtemp(join(tmpdir(), 'lychee-torrent-')), `${torrent.name}.torrent`)
   await writeFile(path, torrent.torrentFile)
   return path
 }

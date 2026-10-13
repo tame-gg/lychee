@@ -16,9 +16,12 @@ async function chooseMore(page: Page, name: string | RegExp): Promise<void> {
   await page.getByRole('menuitem', { name }).click()
 }
 
-async function stubTrash(plexo: import('./fixtures').PlexoApp, destination: string): Promise<void> {
+async function stubTrash(
+  lychee: import('./fixtures').LycheeApp,
+  destination: string
+): Promise<void> {
   await mkdir(destination)
-  await plexo.evaluateMain(({ shell }, dest) => {
+  await lychee.evaluateMain(({ shell }, dest) => {
     shell.trashItem = async (path: string): Promise<void> => {
       const { rename } = process.getBuiltinModule('node:fs/promises')
       const { basename, join } = process.getBuiltinModule('node:path')
@@ -28,28 +31,28 @@ async function stubTrash(plexo: import('./fixtures').PlexoApp, destination: stri
 }
 
 test('mixed selection applies actions only to eligible downloads and keeps finished files', async ({
-  plexo,
+  lychee,
   serve
 }) => {
   const complete = await serve({ size: BLOCK })
-  await plexo.start(complete.url(), complete.sha256, { fileName: 'finished.bin' })
-  const finished = await plexo.waitForStatus('completed')
+  await lychee.start(complete.url(), complete.sha256, { fileName: 'finished.bin' })
+  const finished = await lychee.waitForStatus('completed')
   const failed = await serve({ size: 16 * BLOCK })
   const held = failed.hold(4 * BLOCK)
-  await plexo.start(failed.url(), failed.sha256, { fileName: 'expired.bin' })
+  await lychee.start(failed.url(), failed.sha256, { fileName: 'expired.bin' })
   await held
   failed.setRule(() => ({ status: 403 }))
   failed.release()
-  await plexo.waitForStatus('error')
+  await lychee.waitForStatus('error')
   const paused = await serve({ size: 16 * BLOCK })
   const pausedHeld = paused.hold(4 * BLOCK)
-  const pausedId = await plexo.start(paused.url(), paused.sha256, { fileName: 'paused.bin' })
+  const pausedId = await lychee.start(paused.url(), paused.sha256, { fileName: 'paused.bin' })
   await pausedHeld
-  await plexo.api.pauseDownload(pausedId)
+  await lychee.api.pauseDownload(pausedId)
   paused.release()
-  await plexo.waitForStatus('paused')
+  await lychee.waitForStatus('paused')
 
-  const page = plexo.page
+  const page = lychee.page
   const beforeSelection = await page
     .getByRole('button', { name: 'Open paused.bin', exact: true })
     .boundingBox()
@@ -107,38 +110,38 @@ test('mixed selection applies actions only to eligible downloads and keeps finis
 })
 
 test('missing finished files can leave the list but are excluded from file removal', async ({
-  plexo,
+  lychee,
   serve
 }) => {
   const origin = await serve({ size: BLOCK })
-  await plexo.start(origin.url(), origin.sha256)
-  const complete = await plexo.waitForStatus('completed')
+  await lychee.start(origin.url(), origin.sha256)
+  const complete = await lychee.waitForStatus('completed')
   // Rename instead of delete so automatic fixture integrity checks can still inspect the bytes.
   const { rename } = await import('node:fs/promises')
   await rename(complete.destinationPath, `${complete.destinationPath}.moved`)
-  await plexo.page.reload()
-  await plexo.page
+  await lychee.page.reload()
+  await lychee.page
     .getByRole('checkbox', { name: `Select ${complete.fileName}`, exact: true })
     .check()
-  await expect(plexo.page.getByRole('button', { name: /^Move/ })).toHaveCount(0)
-  await plexo.page.getByRole('button', { name: 'Remove from list (1)', exact: true }).click()
-  await plexo.page
+  await expect(lychee.page.getByRole('button', { name: /^Move/ })).toHaveCount(0)
+  await lychee.page.getByRole('button', { name: 'Remove from list (1)', exact: true }).click()
+  await lychee.page
     .getByRole('alertdialog')
     .getByRole('button', { name: 'Remove', exact: true })
     .click()
-  await expect(plexo.page.getByText('No downloads yet', { exact: true })).toBeVisible()
+  await expect(lychee.page.getByText('No downloads yet', { exact: true })).toBeVisible()
   await rename(`${complete.destinationPath}.moved`, complete.destinationPath)
 })
 
 test('showing a file that has moved says so in a dialog, not on the page', async ({
-  plexo,
+  lychee,
   serve
 }) => {
   const origin = await serve({ size: BLOCK })
-  await plexo.start(origin.url(), origin.sha256)
-  const complete = await plexo.waitForStatus('completed')
+  await lychee.start(origin.url(), origin.sha256)
+  const complete = await lychee.waitForStatus('completed')
   const { rename } = await import('node:fs/promises')
-  const page = plexo.page
+  const page = lychee.page
   // The window hasn't been told yet, so the menu still offers it.
   await rename(complete.destinationPath, `${complete.destinationPath}.moved`)
   try {
@@ -159,14 +162,14 @@ test('showing a file that has moved says so in a dialog, not on the page', async
 })
 
 test('trashing finished torrent files preserves unrelated files in the torrent folder', async ({
-  plexo,
+  lychee,
   dirs
 }) => {
   const swarm = await new Swarm().start()
   try {
     const files = [named(seededBytes(BLOCK, 81), 'a.bin'), named(seededBytes(BLOCK, 82), 'b.bin')]
     const torrent = await swarm.seed(files, { folder: 'Owned', pieceLength: 16 * 1024 })
-    await plexo.start(
+    await lychee.start(
       await torrentFileOnDisk(torrent),
       treeSha(
         files.map((data) => ({
@@ -175,20 +178,20 @@ test('trashing finished torrent files preserves unrelated files in the torrent f
         }))
       )
     )
-    const completed = await plexo.waitForTorrentStatus('completed')
+    const completed = await lychee.waitForTorrentStatus('completed')
     await writeFile(join(completed.destinationPath, 'personal.txt'), 'keep me')
     const trash = join(dirs.dest, 'test-trash')
-    await stubTrash(plexo, trash)
-    await plexo.page
+    await stubTrash(lychee, trash)
+    await lychee.page
       .getByRole('checkbox', { name: `Select ${completed.fileName}`, exact: true })
       .check()
     const trashName = process.platform === 'win32' ? 'Recycle Bin' : 'Trash'
-    await chooseMore(plexo.page, `Move file to ${trashName}`)
-    await plexo.page
+    await chooseMore(lychee.page, `Move file to ${trashName}`)
+    await lychee.page
       .getByRole('alertdialog')
       .getByRole('button', { name: 'Delete file', exact: true })
       .click()
-    await expect(plexo.page.getByText('No downloads yet', { exact: true })).toBeVisible()
+    await expect(lychee.page.getByText('No downloads yet', { exact: true })).toBeVisible()
     expect(await readFile(join(completed.destinationPath, 'personal.txt'), 'utf8')).toBe('keep me')
     for (const file of files)
       expect(existsSync(join(trash, basename((file as { name?: string }).name!)))).toBe(true)
@@ -198,7 +201,7 @@ test('trashing finished torrent files preserves unrelated files in the torrent f
 })
 
 test('cancelling an unfinished torrent preserves unrelated files in its folder', async ({
-  plexo
+  lychee
 }) => {
   const swarm = await new Swarm().start()
   try {
@@ -211,7 +214,7 @@ test('cancelling an unfinished torrent preserves unrelated files in its folder',
       pieceLength: 16 * 1024,
       uploadLimit: 64 * 1024
     })
-    const id = await plexo.start(
+    const id = await lychee.start(
       await torrentFileOnDisk(torrent),
       treeSha(
         files.map((data) => ({
@@ -220,10 +223,10 @@ test('cancelling an unfinished torrent preserves unrelated files in its folder',
         }))
       )
     )
-    await plexo.api.pauseDownload(id)
-    const paused = await plexo.waitForTorrentStatus('paused')
+    await lychee.api.pauseDownload(id)
+    const paused = await lychee.waitForTorrentStatus('paused')
     await writeFile(join(paused.destinationPath, 'personal.txt'), 'keep me')
-    await plexo.api.removeDownload(id)
+    await lychee.api.removeDownload(id)
     expect(await readFile(join(paused.destinationPath, 'personal.txt'), 'utf8')).toBe('keep me')
     expect(existsSync(join(paused.destinationPath, 'a.bin'))).toBe(false)
     expect(existsSync(join(paused.destinationPath, 'b.bin'))).toBe(false)
@@ -233,21 +236,21 @@ test('cancelling an unfinished torrent preserves unrelated files in its folder',
 })
 
 test('a removal that fails for one download still removes the rest, and asks again about only that one', async ({
-  plexo,
+  lychee,
   serve,
   dirs
 }) => {
   const first = await serve({ size: BLOCK })
-  await plexo.start(first.url(), first.sha256, { fileName: 'goes.bin' })
-  await plexo.waitForStatus('completed')
+  await lychee.start(first.url(), first.sha256, { fileName: 'goes.bin' })
+  await lychee.waitForStatus('completed')
   const second = await serve({ size: BLOCK })
-  await plexo.start(second.url(), second.sha256, { fileName: 'stays.bin' })
+  await lychee.start(second.url(), second.sha256, { fileName: 'stays.bin' })
   await expect
-    .poll(async () => (await plexo.all()).filter((d) => d.status === 'completed').length)
+    .poll(async () => (await lychee.all()).filter((d) => d.status === 'completed').length)
     .toBe(2)
   const trashed = join(dirname(dirs.dest), 'test-trash')
   await mkdir(trashed)
-  await plexo.evaluateMain(({ shell }, dest) => {
+  await lychee.evaluateMain(({ shell }, dest) => {
     shell.trashItem = async (path: string): Promise<void> => {
       const { rename } = process.getBuiltinModule('node:fs/promises')
       const { basename, join } = process.getBuiltinModule('node:path')
@@ -256,7 +259,7 @@ test('a removal that fails for one download still removes the rest, and asks aga
     }
   }, trashed)
 
-  const page = plexo.page
+  const page = lychee.page
   await page.getByRole('checkbox', { name: 'Select goes.bin', exact: true }).check()
   await page.getByRole('checkbox', { name: 'Select stays.bin', exact: true }).check()
   await page.getByRole('button', { name: /^Move to (Trash|Recycle Bin) \(2\)$/ }).click()

@@ -12,41 +12,41 @@ function positiveNumber(name: string, fallback: number): number {
 }
 
 export const testKnobs = {
-  userDataDir: env['PLEXO_USER_DATA'],
+  userDataDir: env['LYCHEE_USER_DATA'],
   /** Keeps the window off-screen so a test run doesn't pop windows up over the desktop. */
-  hideWindow: env['PLEXO_E2E_HIDE_WINDOW'] === '1',
-  blockBytes: positiveNumber('PLEXO_E2E_BLOCK_BYTES', 8 * 1024 * 1024),
-  retryBaseDelayMs: positiveNumber('PLEXO_E2E_RETRY_BASE_MS', 1000),
-  stallTimeoutMs: positiveNumber('PLEXO_E2E_STALL_MS', 20_000),
-  connectTimeoutMs: positiveNumber('PLEXO_E2E_CONNECT_MS', 10_000),
+  hideWindow: env['LYCHEE_E2E_HIDE_WINDOW'] === '1',
+  blockBytes: positiveNumber('LYCHEE_E2E_BLOCK_BYTES', 8 * 1024 * 1024),
+  retryBaseDelayMs: positiveNumber('LYCHEE_E2E_RETRY_BASE_MS', 1000),
+  stallTimeoutMs: positiveNumber('LYCHEE_E2E_STALL_MS', 20_000),
+  connectTimeoutMs: positiveNumber('LYCHEE_E2E_CONNECT_MS', 10_000),
   /** How long a server that keeps answering busy (429, 503, …) is waited out; see
    * downloadManager.ts. */
-  serverBusyForMs: positiveNumber('PLEXO_E2E_SERVER_BUSY_MS', 5 * 60_000),
-  slowWarmupMs: positiveNumber('PLEXO_E2E_SLOW_WARMUP_MS', 5_000),
-  slowForMs: positiveNumber('PLEXO_E2E_SLOW_FOR_MS', 10_000),
-  silentAfterMs: positiveNumber('PLEXO_E2E_SILENT_MS', 5_000),
-  hedgeAfterMs: positiveNumber('PLEXO_E2E_HEDGE_MS', 2_000),
+  serverBusyForMs: positiveNumber('LYCHEE_E2E_SERVER_BUSY_MS', 5 * 60_000),
+  slowWarmupMs: positiveNumber('LYCHEE_E2E_SLOW_WARMUP_MS', 5_000),
+  slowForMs: positiveNumber('LYCHEE_E2E_SLOW_FOR_MS', 10_000),
+  silentAfterMs: positiveNumber('LYCHEE_E2E_SILENT_MS', 5_000),
+  hedgeAfterMs: positiveNumber('LYCHEE_E2E_HEDGE_MS', 2_000),
   /** How long a magnet link may take to find peers that send its metadata. */
-  magnetTimeoutMs: positiveNumber('PLEXO_E2E_MAGNET_MS', 3 * 60_000),
+  magnetTimeoutMs: positiveNumber('LYCHEE_E2E_MAGNET_MS', 3 * 60_000),
   /** Tests turn the DHT off, so a run never reaches out to the internet's DHT nodes. */
-  torrentDht: env['PLEXO_E2E_DHT'] !== '0'
+  torrentDht: env['LYCHEE_E2E_DHT'] !== '0'
 }
 
-/** `PLEXO_E2E_STREAMS=2` fixes how many streams each network runs and turns the automatic
+/** `LYCHEE_E2E_STREAMS=2` fixes how many streams each network runs and turns the automatic
  * sizing off, so a test can count requests. Read on every call rather than once, so a test can
  * change it between downloads. */
 export function testStreamsPerNetwork(): number | null {
   if (app.isPackaged) return null
-  const value = Number(process.env['PLEXO_E2E_STREAMS'])
+  const value = Number(process.env['LYCHEE_E2E_STREAMS'])
   return value > 0 ? value : null
 }
 
-/** `PLEXO_E2E_INTERFACES=a=127.0.0.1,b=192.168.1.5` replaces the real interface list. Read on
+/** `LYCHEE_E2E_INTERFACES=a=127.0.0.1,b=192.168.1.5` replaces the real interface list. Read on
  * every call rather than once, so a test can make a network "disappear" mid-download by
  * rewriting process.env in the main process. */
 export function testInterfaces(): NetworkInterfaceInfo[] | null {
   if (app.isPackaged) return null
-  const raw = process.env['PLEXO_E2E_INTERFACES']
+  const raw = process.env['LYCHEE_E2E_INTERFACES']
   if (raw === undefined) return null
   return raw
     .split(',')

@@ -1,11 +1,11 @@
 import { api } from './api'
 import type { BridgeAddRequest } from '../../src/shared/browserBridge'
-import { browserContext, confirm, reach, send, storeOf, wake, type Reach } from './plexo'
+import { browserContext, confirm, reach, send, storeOf, wake, type Reach } from './lychee'
 import { excluded, loadSettings } from './settings'
 
-const MENU_ID = 'download-with-plexo'
-// Plexo can't tell the extension it has quit, so the toolbar icon checks on a timer.
-const CHECK_ALARM = 'check-plexo'
+const MENU_ID = 'download-with-lychee'
+// Lychee can't tell the extension it has quit, so the toolbar icon checks on a timer.
+const CHECK_ALARM = 'check-lychee'
 
 const openedAt = new Map<number, number>()
 
@@ -17,17 +17,17 @@ async function showState(reached?: Reach): Promise<void> {
   const { capture } = await loadSettings()
   reached ??= await reach()
   const title = !capture
-    ? 'Plexo: capture is off'
+    ? 'Lychee: capture is off'
     : reached === 'closed'
-      ? 'Plexo isn’t open: downloads stay in the browser'
+      ? 'Lychee isn’t open: downloads stay in the browser'
       : reached === 'update'
-        ? 'Update Plexo to use this extension'
-        : 'Plexo'
+        ? 'Update Lychee to use this extension'
+        : 'Lychee'
   await api.action.setIcon({ path: capture && reached === 'ok' ? ICON : ICON_OFF })
   await api.action.setTitle({ title })
 }
 
-/** True when Plexo took the download; otherwise the browser keeps it. */
+/** True when Lychee took the download; otherwise the browser keeps it. */
 async function capture(item: chrome.downloads.DownloadItem): Promise<boolean> {
   const settings = await loadSettings()
   const url = item.finalUrl || item.url
@@ -48,8 +48,8 @@ async function capture(item: chrome.downloads.DownloadItem): Promise<boolean> {
     if (handoff === 'closed') await showState('closed')
     return false
   }
-  // Plexo shows the download only once the browser's copy is gone. Firefox can't hold a download
-  // while Plexo checks it, so a small one may have finished meanwhile: cancelling then does
+  // Lychee shows the download only once the browser's copy is gone. Firefox can't hold a download
+  // while Lychee checks it, so a small one may have finished meanwhile: cancelling then does
   // nothing, and the browser keeps it rather than both ending up with it.
   await api.downloads.cancel(item.id).catch(() => {})
   const [after] = await api.downloads.search({ id: item.id }).catch(() => [])
@@ -61,7 +61,7 @@ async function capture(item: chrome.downloads.DownloadItem): Promise<boolean> {
   return true
 }
 
-/** A link that opens a tab only to download leaves that tab empty once Plexo takes it. */
+/** A link that opens a tab only to download leaves that tab empty once Lychee takes it. */
 async function closeEmptyTab(urls: readonly (string | undefined)[]): Promise<void> {
   const recently = Date.now() - 30_000
   for (const tab of await api.tabs.query({})) {
@@ -72,7 +72,7 @@ async function closeEmptyTab(urls: readonly (string | undefined)[]): Promise<voi
   }
 }
 
-// In Chromium, answering later holds back the browser's own Save As dialog until Plexo has
+// In Chromium, answering later holds back the browser's own Save As dialog until Lychee has
 // decided, so the user is never asked twice. Firefox has no such event.
 const determining = api.downloads.onDeterminingFilename
 if (determining) {
@@ -84,7 +84,7 @@ if (determining) {
   api.downloads.onCreated.addListener((item) => void capture(item))
 }
 
-/** Sent whatever the settings say, and Plexo is started if needed: the user asked for it. */
+/** Sent whatever the settings say, and Lychee is started if needed: the user asked for it. */
 async function sendLink(
   info: chrome.contextMenus.OnClickData,
   tab?: chrome.tabs.Tab
@@ -116,7 +116,7 @@ function createMenu(): void {
   void api.contextMenus
     .removeAll()
     .then(() =>
-      api.contextMenus.create({ id: MENU_ID, title: 'Download with Plexo', contexts: ['link'] })
+      api.contextMenus.create({ id: MENU_ID, title: 'Download with Lychee', contexts: ['link'] })
     )
 }
 
@@ -134,7 +134,7 @@ api.tabs.onCreated.addListener((tab) => {
 api.storage.onChanged.addListener(() => void showState())
 
 api.runtime.onMessage.addListener((message) => {
-  const { wakePlexo, checkPlexo } = message as { wakePlexo?: boolean; checkPlexo?: boolean }
-  if (checkPlexo) void showState()
-  if (wakePlexo) void wake().then((woke) => showState(woke ? 'ok' : 'closed'))
+  const { wakeLychee, checkLychee } = message as { wakeLychee?: boolean; checkLychee?: boolean }
+  if (checkLychee) void showState()
+  if (wakeLychee) void wake().then((woke) => showState(woke ? 'ok' : 'closed'))
 })

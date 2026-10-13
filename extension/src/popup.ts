@@ -1,5 +1,5 @@
 import { api } from './api'
-import { reach } from './plexo'
+import { reach } from './lychee'
 import { excluded, loadSettings, saveSettings } from './settings'
 
 const element = <T extends HTMLElement>(id: string): T => document.getElementById(id) as T
@@ -20,9 +20,9 @@ async function render(): Promise<void> {
   ])
   const [tone, text] =
     reached === 'closed'
-      ? ['', 'Plexo not open']
+      ? ['', 'Lychee not open']
       : reached === 'update'
-        ? ['warn', 'Update Plexo']
+        ? ['warn', 'Update Lychee']
         : settings.capture
           ? ['ok', 'Connected']
           : ['', 'Capture off']
@@ -33,7 +33,7 @@ async function render(): Promise<void> {
 
   element<HTMLInputElement>('capture').checked = settings.capture
   element('capture-hint').textContent = settings.capture
-    ? 'Downloads open in Plexo instead of the browser.'
+    ? 'Downloads open in Lychee instead of the browser.'
     : 'Downloads stay in the browser.'
 
   element('site-row').hidden = host === null
@@ -46,7 +46,7 @@ async function render(): Promise<void> {
     element('site-hint').textContent = !settings.capture
       ? 'Capture is off everywhere.'
       : on
-        ? 'Downloads from this site go to Plexo.'
+        ? 'Downloads from this site go to Lychee.'
         : 'Downloads from this site stay in the browser.'
   }
 }
@@ -71,12 +71,12 @@ element<HTMLInputElement>('site').addEventListener('change', async (event) => {
 element('grant').addEventListener('click', () => {
   void api.permissions.request(ALL_SITES).then(render)
 })
-element('open-plexo').addEventListener('click', () => {
-  void api.runtime.sendMessage({ wakePlexo: true })
+element('open-lychee').addEventListener('click', () => {
+  void api.runtime.sendMessage({ wakeLychee: true })
 })
 element('options').addEventListener('click', () => void api.runtime.openOptionsPage())
 
 api.storage.onChanged.addListener(() => void render())
 void render()
 // So the toolbar icon agrees with the popup now, not at its next check.
-void api.runtime.sendMessage({ checkPlexo: true }).catch(() => {})
+void api.runtime.sendMessage({ checkLychee: true }).catch(() => {})

@@ -1,6 +1,6 @@
 import type { BrowserContext, BrowserCookie } from '../../shared/types'
 
-const USER_AGENT = 'Plexo/1.0'
+const USER_AGENT = 'Lychee/1.0'
 
 /** Called again for every redirect, so a site's session cookie never reaches the next host (its
  * CDN), while a cookie set for a whole domain still follows a hop within it. */
@@ -44,7 +44,7 @@ const UNSAFE_IN_COOKIE = /[\x00-\x1f\x7f;]/
 const isText = (value: unknown, unsafe = UNSAFE): value is string =>
   typeof value === 'string' && value.length <= MAX_TEXT && !unsafe.test(value)
 
-/** It comes from outside Plexo (the extension, or a manifest read back from disk), so only known
+/** It comes from outside Lychee (the extension, or a manifest read back from disk), so only known
  * fields are kept. */
 export function browserContextFrom(value: unknown): BrowserContext | null {
   if (typeof value !== 'object' || value === null) return null

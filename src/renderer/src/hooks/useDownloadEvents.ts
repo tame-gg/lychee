@@ -9,7 +9,7 @@ export function useDownloadEvents(): void {
   useEffect(() => {
     let disposed = false
     const loadHistory = (): void => {
-      void window.plexo
+      void window.lychee
         .listHistory()
         .then((history) => {
           if (!disposed) receiveHistory(history)
@@ -18,20 +18,20 @@ export function useDownloadEvents(): void {
     }
     // Subscribed before the snapshots are asked for, so nothing sent in between is missed; each
     // update carries a count, so whichever arrives late can't undo the other.
-    const unsubscribe = window.plexo.onDownloadUpdated(receiveDownloadUpdate)
+    const unsubscribe = window.lychee.onDownloadUpdated(receiveDownloadUpdate)
     // A bulk removal changes history once per download: list it once they've settled, rather
     // than re-checking every entry's file after each one. The rows already went from the store.
     let reload: ReturnType<typeof setTimeout> | undefined
-    const unsubscribeHistory = window.plexo.onHistoryChanged(() => {
+    const unsubscribeHistory = window.lychee.onHistoryChanged(() => {
       clearTimeout(reload)
       reload = setTimeout(loadHistory, 150)
     })
-    // A finished file can only be moved or deleted while Plexo is in the background: listing
+    // A finished file can only be moved or deleted while Lychee is in the background: listing
     // again on coming back keeps "moved or deleted" true to the disk, as browsers do when their
     // downloads list is opened.
     window.addEventListener('focus', loadHistory)
 
-    void window.plexo
+    void window.lychee
       .listDownloads()
       .then((snapshots) => {
         if (!disposed) for (const snapshot of snapshots) receiveDownloadUpdate(snapshot)

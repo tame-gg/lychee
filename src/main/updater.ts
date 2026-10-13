@@ -13,7 +13,7 @@ import { saveSettings } from './settings'
 
 const CHECK_EVERY_MS = 4 * 60 * 60_000
 /** Where an update the app couldn't install itself is downloaded from instead. */
-const DOWNLOAD_PAGE = 'https://getplexo.app/'
+const DOWNLOAD_PAGE = 'https://tame.gg/projects/lychee/'
 
 let state: UpdateState = { status: 'idle', autoUpdate: true }
 let getWindow: () => BrowserWindow | null = () => null
@@ -58,7 +58,7 @@ function setAutoUpdate(on: boolean): void {
   autoUpdater.autoDownload = on
   set({ autoUpdate: on })
   saveSettings({ autoUpdate: on }).catch((error) =>
-    console.error('[plexo] failed to save the automatic updates setting', error)
+    console.error('[lychee] failed to save the automatic updates setting', error)
   )
   if (on && state.status === 'available') download()
 }
@@ -77,10 +77,10 @@ function menuItems(): MenuItemConstructorOptions[] {
   } else if (status === 'downloading') {
     items.push({ label: `Downloading ${version}…`, enabled: false })
   } else if (status === 'available') {
-    items.push({ label: `Download Plexo ${version}`, click: download })
+    items.push({ label: `Download Lychee ${version}`, click: download })
   } else if (status === 'error') {
     items.push({
-      label: `Get Plexo ${version} from the Website…`,
+      label: `Get Lychee ${version} from the Website…`,
       click: () => void shell.openExternal(DOWNLOAD_PAGE)
     })
   }
@@ -149,7 +149,7 @@ export function startUpdater(window: () => BrowserWindow | null, autoUpdate: boo
   autoUpdater.on('checking-for-update', () => set({ status: 'checking' }))
   autoUpdater.on('update-not-available', () => {
     set({ status: 'idle', version: undefined })
-    answer('You’re up to date', `Plexo ${app.getVersion()} is the newest version.`)
+    answer('You’re up to date', `Lychee ${app.getVersion()} is the newest version.`)
   })
   autoUpdater.on('update-available', ({ version }) => {
     asked = false
@@ -161,7 +161,7 @@ export function startUpdater(window: () => BrowserWindow | null, autoUpdate: boo
   })
   autoUpdater.on('update-downloaded', ({ version }) => set({ status: 'ready', version }))
   autoUpdater.on('error', (error) => {
-    console.error('[plexo] update failed', error)
+    console.error('[lychee] update failed', error)
     // Before an update is found (offline, GitHub down) there's nothing to show. After, the
     // website still has it — the way an unsigned Mac build, which can't install it, gets it.
     set({ status: state.version ? 'error' : 'idle' })

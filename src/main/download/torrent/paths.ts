@@ -33,7 +33,7 @@ export function safeTorrentPaths(
     const relative = path.relative(base, target)
     const climbsOut = relative === '..' || relative.startsWith(`..${path.sep}`)
     if (!name || !relative || climbsOut || path.isAbsolute(relative)) {
-      throw new UnsafeTorrentError(`This torrent has a file Plexo can't save safely: ${file.path}`)
+      throw new UnsafeTorrentError(`This torrent has a file Lychee can't save safely: ${file.path}`)
     }
     for (const segment of relative.split(path.sep)) {
       if (Buffer.byteLength(segment) > MAX_NAME_BYTES) {

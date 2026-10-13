@@ -36,7 +36,7 @@ let listeningOn: number | null = null
 const handoffs = new Map<string, Offer>()
 let extensionUsed = false
 
-/** Once an extension has connected, closing the window keeps Plexo in the tray, where the
+/** Once an extension has connected, closing the window keeps Lychee in the tray, where the
  * browser can still reach it. */
 export function keepsRunningForBrowser(): boolean {
   return listeningOn !== null && extensionUsed
@@ -58,7 +58,7 @@ export async function startBridge(bridgeHost: BridgeHost): Promise<void> {
       return
     }
   }
-  console.error(`[plexo] browser bridge: ports ${BRIDGE_PORTS.join(', ')} are all taken`)
+  console.error(`[lychee] browser bridge: ports ${BRIDGE_PORTS.join(', ')} are all taken`)
 }
 
 function end(res: ServerResponse, code: number, headers: Record<string, string> = {}): void {
@@ -105,7 +105,7 @@ async function handle(req: IncomingMessage, res: ServerResponse, port: number): 
   if (req.method === 'GET' && path === '/ping') {
     noteExtension()
     return json(res, 200, cors, {
-      app: 'plexo',
+      app: 'lychee',
       version: app.getVersion(),
       api: BRIDGE_API
     } satisfies BridgePing)
