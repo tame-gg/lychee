@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Download with Lychee",
   "short_name": "Lychee",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Send downloads from your browser to Lychee Download Manager.",
   "homepage_url": "https://tame.gg/projects/lychee",
   "icons": {
