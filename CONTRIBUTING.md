@@ -19,7 +19,7 @@ Requires Node.js 22.12+ and npm 9+, on Windows, macOS, or Linux.
 - **Windows**: `npm run build:win`, from PowerShell, writes the installer to `dist/`. For an app you run without installing, use `npm run build:unpack` and open `dist/win-unpacked/lychee.exe`.
 - **Linux**: `npm run build:linux` writes the AppImage and `.deb` packages to `dist/`
 
-Local builds are unsigned.
+Local builds are unsigned, except on macOS, where they are ad-hoc signed.
 
 ## Before opening a PR
 
