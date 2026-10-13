@@ -1,5 +1,5 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, Menu, nativeImage, nativeTheme, shell, Tray } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon-dark.png?asset'
 // 16px tray icons; nativeImage loads the @2x file next to each on its own.
@@ -11,6 +11,7 @@ import { acceptedLink, bringForward, linkFromArgs, offerLink } from './openLinks
 import { loadSettings, loadThemeSource, migrateLegacyNetworkPreferences } from './settings'
 import { startUpdater } from './updater'
 import { testKnobs } from './testKnobs'
+import { windowSize } from './windowSize'
 import type { DownloadManager } from './download/downloadManager'
 
 // In dev mode the app runs as the raw `electron` binary, which otherwise shows "Electron" in
@@ -76,11 +77,8 @@ function titleBarOverlay(): Electron.TitleBarOverlayOptions {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 760,
-    height: 640,
-    minWidth: 720,
-    // Room under the download screen's pinned block grid for a network row and a few of its rows.
-    minHeight: 620,
+    // Sized from the display it opens on, in DIPs like the work area itself (see windowSize.ts).
+    ...windowSize(screen.getPrimaryDisplay().workArea),
     show: false,
     autoHideMenuBar: true,
     title: 'Lychee',

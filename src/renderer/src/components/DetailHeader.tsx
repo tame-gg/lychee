@@ -10,17 +10,20 @@ import {
 } from '../utils/downloadActions'
 import { useDownloadActions, useDownloadActionsState } from './downloadActionsContext'
 import { ACTION_META } from './downloadActionMeta'
+import { MoreActionsMenu } from './MoreActionsMenu'
 import { Button } from './ui/button'
 
 /** The top of a download's own screen, laid out as the list's header is: the way back to the
- * list on the left; on the right the ways out (Cancel while it's unfinished; Remove, and Move to
- * Trash, after) and what the download can do next. They're what its row and its menu offer, from the same list. */
+ * list on the left; on the right at most two buttons, the main one last (Pause or Resume while
+ * it downloads, Show in folder once it's finished) and one beside it (Show in folder, or Open),
+ * then More with the ways out (Cancel while it's unfinished; Remove, and Move to Trash, after).
+ * They're what its row and its menu offer, from the same list. */
 export function DetailHeader({ download }: { download: DownloadItem }): React.JSX.Element {
   const setView = useAppStore((store) => store.setView)
   const { perform } = useDownloadActions()
   const { busy } = useDownloadActionsState()
+  const { primary, secondary } = headerActions(download)
   const manage = manageActions(download)
-  const next = headerActions(download)
 
   // Resuming round-trips through the main process to re-verify the download before its status
   // flips (an ETag re-check over the network for a real download). With no feedback in between,
@@ -34,20 +37,11 @@ export function DetailHeader({ download }: { download: DownloadItem }): React.JS
     void perform(id, [download]).then((done) => done || setWorking(null))
   }
 
-  const button = (
-    id: ActionId,
-    variant: 'default' | 'secondary' | 'destructive'
-  ): React.ReactNode => {
+  const button = (id: ActionId, variant: 'default' | 'secondary'): React.ReactNode => {
     const meta = ACTION_META[id]
     const isWorking = working?.id === id && working.state === state
     return (
-      <Button
-        key={id}
-        type="button"
-        variant={variant}
-        disabled={isWorking || (busy && manage.includes(id))}
-        onClick={() => run(id)}
-      >
+      <Button key={id} type="button" variant={variant} disabled={isWorking} onClick={() => run(id)}>
         {isWorking && meta.working ? meta.working : meta.label}
       </Button>
     )
@@ -58,17 +52,19 @@ export function DetailHeader({ download }: { download: DownloadItem }): React.JS
       <button
         type="button"
         onClick={() => setView({ name: 'list' })}
-        className="-ml-2 flex items-center gap-1 rounded-md px-1.5 py-1 font-sans text-[15px] leading-none font-medium text-[var(--text-secondary)] hover:text-foreground"
+        className="-ml-2 flex min-w-0 items-center gap-1 rounded-md px-1.5 py-1 font-sans text-[15px] leading-none font-medium text-[var(--text-secondary)] hover:text-foreground"
       >
-        <ChevronLeft className="size-4.5" />
-        Downloads
+        <ChevronLeft className="size-4.5 shrink-0" />
+        <span className="truncate">Downloads</span>
       </button>
       <div className="flex-1" />
-      {manage.map((id) => button(id, ACTION_META[id].destructive ? 'destructive' : 'secondary'))}
-      {next.map((id, index) =>
-        // The last is the main one; Pause is never the main one, it's the way to stop.
-        button(id, index === next.length - 1 && id !== 'pause' ? 'default' : 'secondary')
-      )}
+      {secondary && button(secondary, 'secondary')}
+      {primary && button(primary, 'default')}
+      <MoreActionsMenu
+        groups={manage.length > 0 ? [manage.map((id) => ({ id, targets: [download] }))] : []}
+        disabled={busy}
+        size="icon"
+      />
     </div>
   )
 }

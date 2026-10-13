@@ -150,7 +150,8 @@ test.describe('the places that show them agree', () => {
       const menu = ids([item])
       const row = rowAction(item)
       if (row) expect(menu).toContain(row)
-      for (const id of headerActions(item)) expect(menu).toContain(id)
+      const { primary, secondary } = headerActions(item)
+      for (const id of [primary, secondary]) if (id) expect(menu).toContain(id)
       const manage = manageAction(item)
       if (manage) expect(menu).toContain(manage)
       // The first thing a menu offers is what its row button does.
@@ -163,6 +164,32 @@ test.describe('the places that show them agree', () => {
     expect(manageActions(finished({ missing: true }))).toEqual(['remove'])
     expect(manageActions(download({ status: 'paused' }))).toEqual(['cancel'])
     expect(manageActions(download({ status: 'error', error: 'x' }))).toEqual(['remove'])
+  })
+
+  test('its own screen: one main button, one beside it, the ways out behind More', () => {
+    expect(headerActions(download({ status: 'downloading' }))).toEqual({
+      primary: 'pause',
+      secondary: 'reveal'
+    })
+    expect(headerActions(download({ status: 'queued' }))).toEqual({
+      primary: 'pause',
+      secondary: 'reveal'
+    })
+    expect(headerActions(download({ status: 'paused' }))).toEqual({
+      primary: 'resume',
+      secondary: 'reveal'
+    })
+    expect(headerActions(download({ status: 'error', error: 'reset' }))).toEqual({
+      primary: 'retry',
+      secondary: null
+    })
+    expect(headerActions(finished())).toEqual({ primary: 'reveal', secondary: 'open' })
+    expect(headerActions(finished({ missing: true }))).toEqual({ primary: null, secondary: null })
+    // Nothing that takes a download away is ever one of its buttons.
+    for (const item of [download({ status: 'downloading' }), finished()]) {
+      const { primary, secondary } = headerActions(item)
+      for (const id of manageActions(item)) expect([primary, secondary]).not.toContain(id)
+    }
   })
 
   test('a download that is going can be cancelled, one that is over can be removed', () => {

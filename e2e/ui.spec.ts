@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Locator, Page } from '@playwright/test'
+import { DESIGN_MIN, windowSize } from '../src/main/windowSize'
 import { BLOCK, expect, interfacesEnv, NETWORKS, test, treeSha } from './fixtures'
 import { seededBytes } from './origin'
 import { named, Swarm, torrentFileOnDisk } from './torrentSwarm'
@@ -138,13 +139,19 @@ test.describe('UI journeys @smoke', () => {
     lychee,
     serve
   }) => {
-    const minimum = await lychee.evaluateMain(({ BrowserWindow }) => {
+    const minimum = await lychee.evaluateMain(({ BrowserWindow, screen }) => {
       const window = BrowserWindow.getAllWindows()[0]
+      const opened = window.getSize()
       const [width, height] = window.getMinimumSize()
       window.setSize(width, height)
-      return { minimum: [width, height], size: window.getSize() }
+      const { workArea } = screen.getPrimaryDisplay()
+      return { opened, workArea, minimum: [width, height], size: window.getSize() }
     }, null)
-    expect(minimum.minimum).toEqual([720, 620])
+    // Opened at the size worked out from the display's work area, in DIPs as it is.
+    const expected = windowSize(minimum.workArea)
+    expect(minimum.opened).toEqual([expected.width, expected.height])
+    // The test display is big enough for the design's own minimum.
+    expect(minimum.minimum).toEqual([DESIGN_MIN.width, DESIGN_MIN.height])
     expect(minimum.size).toEqual(minimum.minimum)
     const origin = await serve({ size: SIZE })
     const reached = origin.hold(0)
@@ -158,6 +165,9 @@ test.describe('UI journeys @smoke', () => {
     await expect(progress).toHaveAttribute('aria-valuenow', '0')
     await expect(progress).toBeVisible()
     await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeInViewport({
+      ratio: 1
+    })
+    await expect(page.getByRole('button', { name: 'More actions', exact: true })).toBeInViewport({
       ratio: 1
     })
     await expect(page.getByRole('columnheader', { name: 'Network', exact: true })).toBeInViewport({
@@ -247,8 +257,12 @@ test.describe('UI journeys @smoke', () => {
     const reached = origin.hold(6 * BLOCK)
     await page.getByRole('button', { name: 'Download' }).click()
     await reached
-    await page.getByRole('button', { name: 'Cancel download' }).click()
-    await page.getByRole('button', { name: 'Cancel download', exact: true }).click()
+    await page.getByRole('button', { name: 'More actions', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Cancel download' }).click()
+    await page
+      .getByRole('alertdialog')
+      .getByRole('button', { name: 'Cancel download', exact: true })
+      .click()
     origin.release()
     // Gone, with what it had downloaded.
     await expect(page.getByText('No downloads yet')).toBeVisible()
@@ -258,6 +272,61 @@ test.describe('UI journeys @smoke', () => {
     await lychee.expectNextDownload(origin.sha256)
     await page.getByRole('button', { name: 'Download' }).click({ timeout: 5000 })
     await lychee.waitForStatus('completed')
+  })
+
+  test('a download’s own screen: two buttons, the ways out behind More, from the keyboard', async ({
+    lychee,
+    serve
+  }) => {
+    const origin = await serve({ size: SIZE })
+    const page = lychee.page
+    const reveal = /^Show in (Finder|folder)$/
+    const trashName = process.platform === 'win32' ? 'Recycle Bin' : 'Trash'
+    const header = page.getByRole('button', { name: 'Downloads', exact: true }).locator('..')
+
+    const reached = origin.hold(6 * BLOCK)
+    await lychee.start(origin.url(), origin.sha256)
+    await reached
+    await page.getByRole('button', { name: 'Open test.bin', exact: true }).click()
+    // Going: Show in folder beside Pause, the main one; Cancel only in the menu.
+    await expect(header.getByRole('button')).toHaveText(['Downloads', reveal, 'Pause', ''])
+    const more = header.getByRole('button', { name: 'More actions', exact: true })
+    await expect(more).toHaveAttribute('aria-haspopup', 'menu')
+    await more.focus()
+    await page.keyboard.press('Enter')
+    const menu = page.getByRole('menu')
+    await expect(more).toHaveAttribute('aria-expanded', 'true')
+    await expect(menu.getByRole('menuitem')).toHaveText(['Cancel download'])
+    await page.keyboard.press('ArrowDown')
+    await expect(menu.getByRole('menuitem', { name: 'Cancel download' })).toBeFocused()
+    await page.keyboard.press('Enter')
+    // Asked first; kept.
+    const confirmation = page.getByRole('alertdialog')
+    await expect(confirmation).toContainText('Cancel download?')
+    await confirmation.getByRole('button', { name: 'Keep', exact: true }).click()
+    await expect(confirmation).toBeHidden()
+    origin.release()
+    await lychee.waitForHttpStatus('completed')
+
+    // Finished: Open beside Show in folder; Remove and Move to Trash in the menu.
+    await expect(header.getByRole('button')).toHaveText(['Downloads', 'Open', reveal, ''])
+    await more.focus()
+    await page.keyboard.press('ArrowDown')
+    await expect(menu.getByRole('menuitem')).toHaveText([
+      'Remove from list',
+      `Move file to ${trashName}`
+    ])
+    await page.keyboard.press('Escape')
+    await expect(menu).toBeHidden()
+    await expect(more).toBeFocused()
+    await more.click()
+    await menu.getByRole('menuitem', { name: `Move file to ${trashName}` }).click()
+    await expect(confirmation).toContainText('Delete file?')
+    await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await more.click()
+    await menu.getByRole('menuitem', { name: 'Remove from list' }).click()
+    await confirmation.getByRole('button', { name: 'Remove', exact: true }).click()
+    await expect(page.getByText('No downloads yet')).toBeVisible()
   })
 
   test('a link the server rejects shows the error and keeps Download disabled', async ({
