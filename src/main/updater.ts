@@ -15,9 +15,9 @@ import type { UpdateState } from '../shared/types'
 import { saveSettings } from './settings'
 
 const CHECK_EVERY_MS = 6 * 60 * 60_000
-/** Where an update the app couldn't install itself is downloaded from instead. */
 /** How an ad-hoc signed Mac build, which can't install an update itself, gets one. */
 const BREW_UPGRADE = 'brew upgrade --cask lychee'
+/** Where an update the app couldn't install itself is downloaded from instead. */
 const DOWNLOAD_PAGE = 'https://tame.gg/projects/lychee/'
 
 let state: UpdateState = { status: 'idle', autoUpdate: true }

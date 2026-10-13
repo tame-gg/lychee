@@ -117,56 +117,6 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
 
-  # Uploads the builds to the CDN folder the app checks (electron-builder.yml's publish url), over
-  # rsync + SSH as cdn-ci. Skipped unless CDN_SSH_KEY, CDN_KNOWN_HOSTS, CDN_HOST and CDN_PATH are
-  # all set. The host key is pinned (CDN_KNOWN_HOSTS, StrictHostKeyChecking=yes). The
-  # latest*.yml files go up last, so an app never sees a version whose files aren't there yet.
-  # No --delete: older versions stay, so a half-updated app can still finish its download.
-  cdn-upload:
-    if: github.event_name == 'push'
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      CDN_SSH_KEY: ${{ secrets.CDN_SSH_KEY }}
-      CDN_HOST: ${{ secrets.CDN_HOST }}
-      CDN_PATH: ${{ secrets.CDN_PATH }}
-      CDN_KNOWN_HOSTS: ${{ secrets.CDN_KNOWN_HOSTS }}
-    steps:
-      - name: Check the CDN secrets
-        id: secrets
-        run: |
-          if [ -n "$CDN_SSH_KEY" ] && [ -n "$CDN_HOST" ] && [ -n "$CDN_PATH" ] && [ -n "$CDN_KNOWN_HOSTS" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::CDN_SSH_KEY, CDN_KNOWN_HOSTS, CDN_HOST or CDN_PATH isn't set, so nothing is uploaded to the CDN."
-          fi
-
-      - uses: actions/download-artifact@v4
-        if: steps.secrets.outputs.ready == 'true'
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: Upload to the CDN
-        if: steps.secrets.outputs.ready == 'true'
-        run: |
-          key="$RUNNER_TEMP/cdn_key"
-          known="$RUNNER_TEMP/cdn_known_hosts"
-          trap 'rm -f "$key" "$known"' EXIT
-          (umask 077 && printenv CDN_SSH_KEY > "$key" && printenv CDN_KNOWN_HOSTS > "$known")
-          chmod 600 "$key"
-          ssh_cmd="ssh -p 22 -l cdn-ci -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known"
-          dest="$CDN_HOST:${CDN_PATH%/}/lychee/"
-          cd dist
-          shopt -s nullglob
-          files=(*.dmg *.zip *.exe *.AppImage *.deb *.rpm *.blockmap)
-          meta=(latest*.yml)
-          test ${#files[@]} -gt 0 && test ${#meta[@]} -gt 0
-          rsync -avO --mkpath --chmod=D755,F644 -e "$ssh_cmd" -- "${files[@]}" "$dest"
-          rsync -avO --chmod=D755,F644 -e "$ssh_cmd" -- "${meta[@]}" "$dest"
-
   release:
     if: github.event_name == 'push'
     needs: build
