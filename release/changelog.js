@@ -15,7 +15,7 @@
         {
           kind: 'new',
           title: 'Automatic updates',
-          text: 'Lychee now checks cdn.tame.gg for new versions and updates itself.'
+          text: 'Lychee now checks cdn.tame.gg for new versions and installs them (on Mac, via Homebrew).'
         },
         {
           kind: 'fixed',
