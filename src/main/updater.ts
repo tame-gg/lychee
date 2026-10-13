@@ -1,5 +1,6 @@
 import {
   app,
+  clipboard,
   dialog,
   Menu,
   shell,
@@ -15,6 +16,8 @@ import { saveSettings } from './settings'
 
 const CHECK_EVERY_MS = 6 * 60 * 60_000
 /** Where an update the app couldn't install itself is downloaded from instead. */
+/** How an ad-hoc signed Mac build, which can't install an update itself, gets one. */
+const BREW_UPGRADE = 'brew upgrade --cask lychee'
 const DOWNLOAD_PAGE = 'https://tame.gg/projects/lychee/'
 
 let state: UpdateState = { status: 'idle', autoUpdate: true }
@@ -23,7 +26,7 @@ let getWindow: () => BrowserWindow | null = () => null
 let asked = false
 /** Whether this build can install an update itself. Squirrel.Mac only installs an update signed
  * like the running app, and an ad-hoc signed one (identity "-") matches no other build, so a Mac
- * build without a Developer ID signature just says an update is out and links the website. */
+ * build without a Developer ID signature points to `brew upgrade --cask lychee` (or the website). */
 let canInstall = process.platform !== 'darwin'
 
 function hasDeveloperId(): Promise<boolean> {
@@ -95,10 +98,15 @@ function menuItems(): MenuItemConstructorOptions[] {
   } else if (status === 'downloading') {
     items.push({ label: `Downloading ${version}…`, enabled: false })
   } else if (status === 'available' && !canInstall) {
-    items.push({
-      label: `Get Lychee ${version} from the Website…`,
-      click: () => void shell.openExternal(DOWNLOAD_PAGE)
-    })
+    // Ad-hoc Mac builds update through the Homebrew cask (tame-gg/homebrew-tap).
+    items.push(
+      { label: `Lychee ${version} is out: run ${BREW_UPGRADE}`, enabled: false },
+      { label: 'Copy Command', click: () => clipboard.writeText(BREW_UPGRADE) },
+      {
+        label: `Get Lychee ${version} from the Website…`,
+        click: () => void shell.openExternal(DOWNLOAD_PAGE)
+      }
+    )
   } else if (status === 'available') {
     items.push({ label: `Download Lychee ${version}`, click: download })
   } else if (status === 'error') {
