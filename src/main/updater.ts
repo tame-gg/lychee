@@ -27,7 +27,9 @@ let asked = false
 /** Whether this build can install an update itself. Squirrel.Mac only installs an update signed
  * like the running app, and an ad-hoc signed one (identity "-") matches no other build, so a Mac
  * build without a Developer ID signature points to `brew upgrade --cask lychee` (or the website). */
-let canInstall = process.platform !== 'darwin'
+let canInstall = process.platform === 'win32'
+/** How many downloads a restart would pause (set by startUpdater). */
+let activeDownloads: () => Promise<number> = async () => 0
 
 function hasDeveloperId(): Promise<boolean> {
   // process.execPath is Lychee.app/Contents/MacOS/Lychee.
@@ -59,10 +61,8 @@ function answer(message: string, detail?: string): void {
 
 function check(fromMenu = false): void {
   const { status } = state
-  // A failed install isn't retried on a timer: on an unsigned Mac it would fail again, after
-  // downloading the whole update again.
+  // A failed download is tried again on the next timer check too.
   if (status === 'checking' || status === 'downloading' || status === 'ready') return
-  if (status === 'error' && !fromMenu) return
   // Dev and e2e builds aren't packaged and have no app-update.yml to check.
   if (!app.isPackaged) return
   asked = fromMenu
@@ -93,10 +93,16 @@ function menuItems(): MenuItemConstructorOptions[] {
     // Silent, and opened again after: the installer's own pages were all answered the first time.
     items.push({
       label: `Restart to Update to ${version}`,
-      click: () => autoUpdater.quitAndInstall(true, true)
+      click: () => void restartToUpdate()
     })
   } else if (status === 'downloading') {
     items.push({ label: `Downloading ${version}…`, enabled: false })
+  } else if (status === 'available' && !canInstall && process.platform !== 'darwin') {
+    // A .deb or .rpm install: the package manager owns the files, so only the website link.
+    items.push({
+      label: `Get Lychee ${version} from the Website…`,
+      click: () => void shell.openExternal(DOWNLOAD_PAGE)
+    })
   } else if (status === 'available' && !canInstall) {
     // Ad-hoc Mac builds update through the Homebrew cask (tame-gg/homebrew-tap).
     items.push(
@@ -129,6 +135,22 @@ function menuItems(): MenuItemConstructorOptions[] {
     }
   )
   return items
+}
+
+/** Restarting pauses every active download (they resume on the next launch), so ask first. */
+async function restartToUpdate(): Promise<void> {
+  const count = await activeDownloads().catch(() => 0)
+  if (count > 0) {
+    const { response } = await dialog.showMessageBox({
+      type: 'question',
+      message: `${count} download${count === 1 ? '' : 's'} will pause and resume after the update`,
+      buttons: ['Restart', 'Later'],
+      defaultId: 0,
+      cancelId: 1
+    })
+    if (response !== 0) return
+  }
+  autoUpdater.quitAndInstall(true, true)
 }
 
 export function showUpdateMenu(): void {
@@ -169,9 +191,13 @@ function setAppMenu(): void {
  * names). A downloaded update installs on restart, or on the next quit if there isn't one. */
 export async function startUpdater(
   window: () => BrowserWindow | null,
-  autoUpdate: boolean
+  autoUpdate: boolean,
+  countActive: () => Promise<number>
 ): Promise<void> {
   getWindow = window
+  activeDownloads = countActive
+  // electron-updater can only replace an AppImage; a .deb or .rpm install has no APPIMAGE.
+  if (process.platform === 'linux') canInstall = Boolean(process.env.APPIMAGE)
   state = { ...state, autoUpdate }
   if (process.platform === 'darwin' && app.isPackaged) canInstall = await hasDeveloperId()
   autoUpdater.autoDownload = autoUpdate && canInstall
@@ -203,5 +229,5 @@ export async function startUpdater(
 
   setAppMenu()
   check()
-  setInterval(check, CHECK_EVERY_MS)
+  setInterval(check, CHECK_EVERY_MS).unref()
 }

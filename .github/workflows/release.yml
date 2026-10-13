@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -113,7 +113,7 @@ jobs:
             dist/*.AppImage
             dist/*.deb
             dist/*.rpm
-            dist/*.yml
+            dist/latest*.yml
             dist/*.blockmap
           if-no-files-found: error
 
@@ -126,6 +126,8 @@ jobs:
     if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       CDN_UPLOAD_KEY: ${{ secrets.CDN_UPLOAD_KEY }}
     steps:
@@ -143,14 +145,19 @@ jobs:
         if: env.CDN_UPLOAD_KEY != ''
         run: |
           # TODO: replace with the real upload once the CDN plan is settled.
-          ls -1 dist | grep -v '^latest' || true
-          ls -1 dist | grep '^latest' || true
+          # Only these go up; builder-debug.yml and other build leftovers don't.
+          cd dist
+          ls -1 -- *.dmg *.zip *.exe *.AppImage *.deb *.rpm *.blockmap 2>/dev/null || true
+          ls -1 -- latest*.yml 2>/dev/null || true
           echo "::warning::CDN upload isn't implemented yet; nothing was uploaded."
 
   release:
     if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
+    # Only this job writes: it creates the draft release.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
