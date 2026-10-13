@@ -164,8 +164,8 @@ jobs:
           files=(*.dmg *.zip *.exe *.AppImage *.deb *.rpm *.blockmap)
           meta=(latest*.yml)
           test ${#files[@]} -gt 0 && test ${#meta[@]} -gt 0
-          rsync -av --mkpath --chmod=D755,F644 -e "$ssh_cmd" -- "${files[@]}" "$dest"
-          rsync -av --chmod=D755,F644 -e "$ssh_cmd" -- "${meta[@]}" "$dest"
+          rsync -avO --mkpath --chmod=D755,F644 -e "$ssh_cmd" -- "${files[@]}" "$dest"
+          rsync -avO --chmod=D755,F644 -e "$ssh_cmd" -- "${meta[@]}" "$dest"
 
   release:
     if: github.event_name == 'push'
