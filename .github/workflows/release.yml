@@ -117,11 +117,10 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
 
-  # PLACEHOLDER: uploads the builds and their latest*.yml / .blockmap files to the CDN folder the
-  # app checks (electron-builder.yml's publish url). Skipped until the CDN_UPLOAD_KEY secret
-  # exists; the uploader account and how the CDN keeps fixed file names are still being decided,
-  # so the step below only lists what it would upload. Upload the latest*.yml files last, so an
-  # app never sees a version whose files aren't there yet.
+  # Uploads the builds to the CDN folder the app checks (electron-builder.yml's publish url), over
+  # rsync + SSH. Skipped unless CDN_SSH_KEY, CDN_HOST (user@host) and CDN_PATH are all set. The
+  # latest*.yml files go up last, so an app never sees a version whose files aren't there yet.
+  # No --delete: older versions stay, so a half-updated app can still finish its download.
   cdn-upload:
     if: github.event_name == 'push'
     needs: build
@@ -129,27 +128,41 @@ jobs:
     permissions:
       contents: read
     env:
-      CDN_UPLOAD_KEY: ${{ secrets.CDN_UPLOAD_KEY }}
+      CDN_SSH_KEY: ${{ secrets.CDN_SSH_KEY }}
+      CDN_HOST: ${{ secrets.CDN_HOST }}
+      CDN_PATH: ${{ secrets.CDN_PATH }}
     steps:
-      - name: Skip without CDN_UPLOAD_KEY
-        if: env.CDN_UPLOAD_KEY == ''
-        run: echo "::notice::CDN_UPLOAD_KEY isn't set, so nothing is uploaded to the CDN."
+      - name: Check the CDN secrets
+        id: secrets
+        run: |
+          if [ -n "$CDN_SSH_KEY" ] && [ -n "$CDN_HOST" ] && [ -n "$CDN_PATH" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CDN_SSH_KEY, CDN_HOST or CDN_PATH isn't set, so nothing is uploaded to the CDN."
+          fi
 
       - uses: actions/download-artifact@v4
-        if: env.CDN_UPLOAD_KEY != ''
+        if: steps.secrets.outputs.ready == 'true'
         with:
           path: dist
           merge-multiple: true
 
-      - name: Upload to the CDN (placeholder)
-        if: env.CDN_UPLOAD_KEY != ''
+      - name: Upload to the CDN
+        if: steps.secrets.outputs.ready == 'true'
         run: |
-          # TODO: replace with the real upload once the CDN plan is settled.
-          # Only these go up; builder-debug.yml and other build leftovers don't.
+          key="$RUNNER_TEMP/cdn_key"
+          (umask 077 && printenv CDN_SSH_KEY > "$key")
+          chmod 600 "$key"
+          trap 'rm -f "$key"' EXIT
+          ssh_cmd="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts"
+          dest="$CDN_HOST:${CDN_PATH%/}/lychee/"
           cd dist
-          ls -1 -- *.dmg *.zip *.exe *.AppImage *.deb *.rpm *.blockmap 2>/dev/null || true
-          ls -1 -- latest*.yml 2>/dev/null || true
-          echo "::warning::CDN upload isn't implemented yet; nothing was uploaded."
+          shopt -s nullglob
+          files=(*.dmg *.zip *.exe *.AppImage *.deb *.rpm *.blockmap)
+          meta=(latest*.yml)
+          test ${#files[@]} -gt 0 && test ${#meta[@]} -gt 0
+          rsync -av --mkpath -e "$ssh_cmd" -- "${files[@]}" "$dest"
+          rsync -av -e "$ssh_cmd" -- "${meta[@]}" "$dest"
 
   release:
     if: github.event_name == 'push'
