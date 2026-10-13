@@ -219,7 +219,7 @@ Package the app for each platform:
 - **Linux**: `npm run build:linux` writes the AppImage, `.deb`, and `.rpm` packages to `dist/`
 - **Browser extension**: `npm run build:extension` writes `extension/dist/chrome` and `extension/dist/firefox`
 
-Local builds are unsigned.
+Local builds are unsigned, except on macOS, where they are ad-hoc signed.
 
 ## Contributing
 

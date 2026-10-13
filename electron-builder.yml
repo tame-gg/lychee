@@ -67,9 +67,16 @@ mac:
           LSHandlerRank: Alternate
           CFBundleTypeExtensions: [torrent]
           LSItemContentTypes: [org.bittorrent.torrent]
-  # Signed when CSC_LINK/CSC_KEY_PASSWORD are set, and then notarized when APPLE_API_KEY,
-  # APPLE_API_KEY_ID and APPLE_API_ISSUER are (see .github/workflows/release.yml). An unsigned
-  # build still works, but can't update itself: macOS only installs signed updates.
+  # Ad-hoc signed by default: a downloaded ad-hoc app gets Gatekeeper's "unidentified developer"
+  # prompt, where an unsigned one is reported as "damaged", and Apple Silicon won't run unsigned code.
+  # Hardened runtime is off with it: its library validation rejects the ad-hoc signed Electron
+  # Framework (no Team ID), and it only matters for notarization, which an ad-hoc build never gets.
+  # With CSC_LINK/CSC_KEY_PASSWORD set, the release workflow turns both back on for a Developer ID
+  # signature, notarized when APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER are set too (see
+  # .github/workflows/release.yml). Only a Developer ID build can update itself: macOS checks an
+  # update against the running app's signature, and an ad-hoc one matches no other build.
+  identity: '-'
+  hardenedRuntime: false
 dmg:
   artifactName: ${name}-${version}-${arch}.${ext}
 linux:
