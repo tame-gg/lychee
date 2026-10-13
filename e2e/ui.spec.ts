@@ -411,6 +411,51 @@ test.describe('settings @smoke', () => {
     await expectAllKept()
   })
 
+  test('Interface size zooms the content, not the window, and survives a restart', async ({
+    lychee,
+    dirs
+  }) => {
+    const window = (): Promise<{ zoom: number; bounds: Electron.Rectangle }> =>
+      lychee.electronApp.evaluate(({ BrowserWindow }) => {
+        const w = BrowserWindow.getAllWindows()[0]
+        return { zoom: w.webContents.getZoomFactor(), bounds: w.getBounds() }
+      })
+    const choose = async (name: string): Promise<void> => {
+      await lychee.page.getByRole('button', { name: 'About Lychee' }).click()
+      await lychee.page.getByRole('button', { name, exact: true }).click()
+      await lychee.page.keyboard.press('Escape')
+    }
+    const pressed = async (name: string): Promise<void> => {
+      await lychee.page.getByRole('button', { name: 'About Lychee' }).click()
+      await expect(lychee.page.getByRole('button', { name, exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      await lychee.page.keyboard.press('Escape')
+    }
+
+    // Xvfb's display is at 100%, where Auto leaves the content alone.
+    const before = await window()
+    expect(before.zoom).toBe(1)
+    await pressed('Auto')
+
+    await choose('80%')
+    await expect.poll(async () => (await window()).zoom).toBe(0.8)
+    expect((await window()).bounds).toEqual(before.bounds)
+
+    await lychee.relaunch()
+    await pressed('80%')
+    await expect.poll(async () => (await window()).zoom).toBe(0.8)
+
+    await choose('Auto')
+    await expect.poll(async () => (await window()).zoom).toBe(1)
+    await expect
+      .poll(async () =>
+        JSON.parse(await readFile(join(dirs.userData, 'app-settings.json'), 'utf8'))
+      )
+      .not.toHaveProperty('interfaceSize')
+  })
+
   test('a broken settings file falls back to what a fresh install shows', async ({
     lychee,
     dirs

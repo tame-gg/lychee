@@ -351,8 +351,15 @@ export interface AppSettings {
   slowModeSpeed?: number
   /** How speeds are shown everywhere; sizes stay in bytes either way. */
   speedUnit?: SpeedUnit
+  /** Only ever saved as a percentage: Auto is saved as no value. */
+  interfaceSize?: InterfaceSize
   browserExtensionUsed?: boolean
 }
+
+/** How big the window's content is drawn. Auto shrinks it a little on a highly scaled display
+ * (see main/interfaceZoom.ts); a percentage is that zoom on every display. */
+export type InterfaceSize = 'auto' | 100 | 90 | 80
+export const INTERFACE_SIZES: InterfaceSize[] = ['auto', 100, 90, 80]
 
 /** bytes: MB/s. bits: Mbps, as internet plans and speed tests count them. */
 export type SpeedUnit = 'bytes' | 'bits'
@@ -376,6 +383,7 @@ export interface InitialState {
   slowMode: boolean
   slowModeSpeed: number
   speedUnit: SpeedUnit
+  interfaceSize: InterfaceSize
   /** The last folder picked, if it still exists — otherwise the renderer uses downloadsDir. */
   destinationDir?: string
 }

@@ -5,6 +5,7 @@ import type {
   DownloadState,
   DownloadUpdate,
   FinishedDownload,
+  InterfaceSize,
   NetworkInterfaceInfo,
   NetworkPreference,
   NetworkPreferences,
@@ -52,6 +53,8 @@ interface AppStore {
   slowModeSpeed: number
   /** Persisted — MB/s or Mbps, for every speed shown. */
   speedUnit: SpeedUnit
+  /** Persisted — Auto or a fixed zoom for the window's content; main applies it. */
+  interfaceSize: InterfaceSize
 
   /** Lifted out of the Idle screen so it survives a swap to/from the No-connections screen. */
   draftUrl: string
@@ -94,6 +97,7 @@ interface AppStore {
   setSlowMode: (on: boolean) => void
   setSlowModeSpeed: (bytesPerSec: number) => void
   setSpeedUnit: (unit: SpeedUnit) => void
+  setInterfaceSize: (size: InterfaceSize) => void
   setDraftUrl: (url: string) => void
   setDestinationDir: (dir: string) => void
 }
@@ -133,6 +137,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   slowMode: initial.slowMode,
   slowModeSpeed: initial.slowModeSpeed,
   speedUnit: initial.speedUnit,
+  interfaceSize: initial.interfaceSize,
 
   draftUrl: '',
   links: [],
@@ -267,6 +272,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setSpeedUnit: (speedUnit) => {
     set({ speedUnit })
     persist({ speedUnit })
+  },
+
+  setInterfaceSize: (interfaceSize) => {
+    set({ interfaceSize })
+    persist({ interfaceSize })
   },
 
   setDraftUrl: (draftUrl) => set({ draftUrl }),
