@@ -155,7 +155,16 @@ test('the shipped changelog has an entry for the current version @smoke', () => 
     { encoding: 'utf8' }
   )
   expect(run.status).toBe(0)
-  const out = run.stdout
-  expect(out).toContain('First Lychee release')
-  expect(out).toContain('Plexo by Anmol Kapil')
+  expect(run.stdout).toMatch(/^- \*\*/m)
+})
+
+test('the v0.1.0 changelog entry keeps its release notes', () => {
+  const run = spawnSync(
+    process.execPath,
+    [resolve(__dirname, '../scripts/release-notes.mjs'), 'v0.1.0', '--changelog'],
+    { encoding: 'utf8' }
+  )
+  expect(run.status).toBe(0)
+  expect(run.stdout).toContain('First Lychee release')
+  expect(run.stdout).toContain('Plexo by Anmol Kapil')
 })

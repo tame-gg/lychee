@@ -20,7 +20,7 @@
         {
           kind: 'fixed',
           title: 'Mac app opens again',
-          text: 'The Mac build is now properly signed, so macOS no longer reports it as damaged.'
+          text: 'The Mac build is now signed correctly (ad-hoc), so macOS no longer reports it as damaged.'
         }
       ]
     },
