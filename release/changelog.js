@@ -10,6 +10,21 @@
 
   root.LycheeChangelog = [
     {
+      version: 'v0.1.1',
+      items: [
+        {
+          kind: 'new',
+          title: 'Automatic updates',
+          text: 'Lychee now checks cdn.tame.gg for new versions and installs them (on Mac, via Homebrew).'
+        },
+        {
+          kind: 'fixed',
+          title: 'Mac app opens again',
+          text: 'The Mac build is now signed correctly (ad-hoc), so macOS no longer reports it as damaged.'
+        }
+      ]
+    },
+    {
       version: 'v0.1.0',
       items: [
         {
