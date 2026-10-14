@@ -28,6 +28,38 @@ function Calendar({
   buttonVariant?: React.ComponentProps<typeof Button>['variant']
 }): React.JSX.Element {
   const defaultClassNames = getDefaultClassNames()
+  // Memoised so a parent re-render doesn't hand DayPicker new component types, which would
+  // remount the whole calendar (and detach its buttons mid-click) on every render.
+  const calendarComponents = React.useMemo<React.ComponentProps<typeof DayPicker>['components']>(
+    () => ({
+      Root: ({ className, rootRef, ...props }: React.ComponentProps<typeof Root>) => {
+        return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />
+      },
+      Chevron: ({ className, orientation, ...props }: React.ComponentProps<typeof Chevron>) => {
+        if (orientation === 'left') {
+          return <ChevronLeftIcon className={cn('size-4', className)} {...props} />
+        }
+
+        if (orientation === 'right') {
+          return <ChevronRightIcon className={cn('size-4', className)} {...props} />
+        }
+
+        return <ChevronDownIcon className={cn('size-4', className)} {...props} />
+      },
+      DayButton: ({ ...props }) => <CalendarDayButton locale={locale} {...props} />,
+      WeekNumber: ({ children, ...props }) => {
+        return (
+          <td {...props}>
+            <div className="flex size-(--cell-size) items-center justify-center text-center">
+              {children}
+            </div>
+          </td>
+        )
+      },
+      ...components
+    }),
+    [locale, components]
+  )
 
   return (
     <DayPicker
@@ -119,33 +151,7 @@ function Calendar({
         hidden: cn('invisible', defaultClassNames.hidden),
         ...classNames
       }}
-      components={{
-        Root: ({ className, rootRef, ...props }: React.ComponentProps<typeof Root>) => {
-          return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />
-        },
-        Chevron: ({ className, orientation, ...props }: React.ComponentProps<typeof Chevron>) => {
-          if (orientation === 'left') {
-            return <ChevronLeftIcon className={cn('size-4', className)} {...props} />
-          }
-
-          if (orientation === 'right') {
-            return <ChevronRightIcon className={cn('size-4', className)} {...props} />
-          }
-
-          return <ChevronDownIcon className={cn('size-4', className)} {...props} />
-        },
-        DayButton: ({ ...props }) => <CalendarDayButton locale={locale} {...props} />,
-        WeekNumber: ({ children, ...props }) => {
-          return (
-            <td {...props}>
-              <div className="flex size-(--cell-size) items-center justify-center text-center">
-                {children}
-              </div>
-            </td>
-          )
-        },
-        ...components
-      }}
+      components={calendarComponents}
       {...props}
     />
   )
