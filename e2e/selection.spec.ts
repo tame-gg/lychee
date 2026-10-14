@@ -142,13 +142,16 @@ test('showing a file that has moved says so in a dialog, not on the page', async
   const complete = await lychee.waitForStatus('completed')
   const { rename } = await import('node:fs/promises')
   const page = lychee.page
-  // The window hasn't been told yet, so the menu still offers it.
+  // Open the menu while the file is still there, then move it: the menu already offers
+  // Show in, and only trying it finds the file gone.
+  await page.getByRole('button', { name: `Open ${complete.fileName}`, exact: true }).click({
+    button: 'right'
+  })
+  const reveal = page.getByRole('menuitem', { name: /^Show in/ })
+  await expect(reveal).toBeVisible()
   await rename(complete.destinationPath, `${complete.destinationPath}.moved`)
   try {
-    await page.getByRole('button', { name: `Open ${complete.fileName}`, exact: true }).click({
-      button: 'right'
-    })
-    await page.getByRole('menuitem', { name: /^Show in/ }).click()
+    await reveal.click()
     const dialog = page.getByRole('alertdialog')
     await expect(dialog.getByText('Couldn’t show file', { exact: true })).toBeVisible()
     await expect(dialog.getByText('That file is no longer where it was saved.')).toBeVisible()
