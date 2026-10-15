@@ -56,7 +56,9 @@ function set(patch: Partial<UpdateState>): void {
 function answer(message: string, detail?: string): void {
   if (!asked) return
   asked = false
-  void dialog.showMessageBox({ message, detail })
+  const window = getWindow()
+  const options = { message, detail }
+  void (window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options))
 }
 
 /** electron-updater's error when the channel file (latest*.yml) is missing from the CDN. */
@@ -147,13 +149,17 @@ function menuItems(): MenuItemConstructorOptions[] {
 async function restartToUpdate(): Promise<void> {
   const count = await activeDownloads().catch(() => 0)
   if (count > 0) {
-    const { response } = await dialog.showMessageBox({
-      type: 'question',
+    const options = {
+      type: 'question' as const,
       message: `${count} download${count === 1 ? '' : 's'} will pause and resume after the update`,
       buttons: ['Restart', 'Later'],
       defaultId: 0,
       cancelId: 1
-    })
+    }
+    const window = getWindow()
+    const { response } = await (window
+      ? dialog.showMessageBox(window, options)
+      : dialog.showMessageBox(options))
     if (response !== 0) return
   }
   autoUpdater.quitAndInstall(true, true)
