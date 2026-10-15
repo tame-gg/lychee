@@ -93,6 +93,7 @@ function sanitizeSettings(parsed: unknown): AppSettings {
     settings.interfaceSize = parsed.interfaceSize
   }
   if (parsed.browserExtensionUsed === true) settings.browserExtensionUsed = true
+  if (parsed.sidebarCollapsed === true) settings.sidebarCollapsed = true
   return settings
 }
 

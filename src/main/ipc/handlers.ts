@@ -138,6 +138,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         slowModeSpeed: settings.slowModeSpeed ?? DEFAULT_SLOW_MODE_SPEED,
         speedUnit: settings.speedUnit ?? 'bytes',
         interfaceSize: settings.interfaceSize ?? 'auto',
+        sidebarCollapsed: settings.sidebarCollapsed ?? false,
         destinationDir: destinationExists ? destinationDir : undefined
       } satisfies InitialState
     } catch (error) {
@@ -152,7 +153,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         slowMode: false,
         slowModeSpeed: DEFAULT_SLOW_MODE_SPEED,
         speedUnit: 'bytes',
-        interfaceSize: 'auto'
+        interfaceSize: 'auto',
+        sidebarCollapsed: false
       } satisfies InitialState
     }
   })
