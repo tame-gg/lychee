@@ -14,8 +14,9 @@ import type {
   ThemeSource
 } from '@shared/types'
 import { create } from 'zustand'
+import type { FileKind } from '../utils/fileKind'
 
-export type DownloadFilter = 'all' | 'progress' | 'finished' | 'failed'
+export type DownloadFilter = 'all' | 'downloading' | 'queued' | 'paused' | 'failed' | 'finished'
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -42,6 +43,10 @@ interface AppStore {
   view: View
   downloadFilter: DownloadFilter
   setDownloadFilter: (filter: DownloadFilter) => void
+  downloadKind: FileKind | null
+  setDownloadKind: (kind: FileKind | null) => void
+  sidebarCollapsed: boolean
+  setSidebarCollapsed: (collapsed: boolean) => void
   downloadSchedule: DownloadSchedule | undefined
   /** The New download dialog, over whatever the window shows. */
   newDownloadOpen: boolean
@@ -130,6 +135,13 @@ export const useAppStore = create<AppStore>((set, get) => ({
   view: { name: 'list' },
   downloadFilter: 'all',
   setDownloadFilter: (downloadFilter) => set({ downloadFilter }),
+  downloadKind: null,
+  setDownloadKind: (downloadKind) => set({ downloadKind }),
+  sidebarCollapsed: initial.sidebarCollapsed,
+  setSidebarCollapsed: (sidebarCollapsed) => {
+    set({ sidebarCollapsed })
+    persist({ sidebarCollapsed })
+  },
   downloadSchedule: initial.downloadSchedule,
   newDownloadOpen: false,
   downloadsAtOnce: initial.downloadsAtOnce,

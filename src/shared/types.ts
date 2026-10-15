@@ -354,6 +354,7 @@ export interface AppSettings {
   /** Only ever saved as a percentage: Auto is saved as no value. */
   interfaceSize?: InterfaceSize
   browserExtensionUsed?: boolean
+  sidebarCollapsed?: boolean
 }
 
 /** How big the window's content is drawn. Auto shrinks it a little on a highly scaled display
@@ -384,6 +385,7 @@ export interface InitialState {
   slowModeSpeed: number
   speedUnit: SpeedUnit
   interfaceSize: InterfaceSize
+  sidebarCollapsed: boolean
   /** The last folder picked, if it still exists — otherwise the renderer uses downloadsDir. */
   destinationDir?: string
 }
