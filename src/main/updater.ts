@@ -59,6 +59,12 @@ function answer(message: string, detail?: string): void {
   void dialog.showMessageBox({ message, detail })
 }
 
+/** electron-updater's error when the channel file (latest*.yml) is missing from the CDN. */
+function isNoReleaseYet(error: unknown): boolean {
+  const { code, statusCode } = (error ?? {}) as { code?: string; statusCode?: number }
+  return code === 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND' || statusCode === 404
+}
+
 function check(fromMenu = false): void {
   const { status } = state
   // A failed download is tried again on the next timer check too.
@@ -224,6 +230,11 @@ export async function startUpdater(
     // Before an update is found (offline, CDN down) there's nothing to show. After, the
     // website still has it — the way an unsigned Mac build, which can't install it, gets it.
     set({ status: state.version ? 'error' : 'idle' })
+    // No latest*.yml on the CDN (404) means nothing has been published yet, not a network problem.
+    if (isNoReleaseYet(error)) {
+      answer('No updates available yet', `Lychee ${app.getVersion()} is the newest version.`)
+      return
+    }
     answer('Couldn’t check for updates', 'Check your connection and try again.')
   })
 
