@@ -1,0 +1,217 @@
+# Lychee × net-merge: system-wide connection merging inside the Lychee GUI (plan)
+
+Date: 2026-10-17. Read against `~/work/s3/net-merge` at `2093cc1` (v0.3.0, MIT) and `~/work/s3/lychee` on branch `s3/sidebar` at `8efd6bc` (v0.1.1). Planning only; nothing in either repo was changed.
+
+Andrew's ask: "find a way to integrate this into lychee. same idea, but systemwide. this has it in the menu bar, i want it inside of a gui based thing. so it shows total combined speed, speed from each source just like now."
+
+**Recommendation in one paragraph.** Ship net-merge's Go engine as a privileged sidecar helper inside Lychee (option A), controlled over a local socket with a small JSON protocol that net-merge does not have yet and that we add upstream (or in a fork). Lychee's main process owns the helper's lifecycle, elevation and crash handling, and the renderer gets a new "Network" page in the sidebar that reuses the existing throughput chart, combine diagram and network row components. Fallback if a platform cannot run a TUN helper (no admin, Linux AppImage without capabilities): a system-proxy mode (option C) built on net-merge's existing SOCKS5 front end, with a revert journal. Porting the engine to TypeScript (B) is not realistic, and Lychee-only (D) is what exists today and stays the default.
+
+Physics first, because it shapes every UI string: one TCP connection always rides one link. Neither net-merge nor Lychee can make a single connection faster than the link it is on without MPTCP or an aggregation server. Combined speed comes from spreading many connections. Lychee already does that for its own downloads by opening streams bound to each adapter. System-wide merging extends the same trick to every other app (Steam, browsers, OS updates) by capturing their new connections and re-dialing each from one adapter.
+
+---
+
+## 1. What net-merge is, precisely
+
+### 1.1 How it combines links (`internal/tun`, `internal/engine`, `internal/nics`)
+
+- **Capture.** `Tun.On()` in `internal/tun/tun.go` opens a virtual adapter through tun2socks' device layer (`tun.Open(openName, MTU)`), creates a gVisor netstack (`core.CreateStack`), then `configure()` (per OS: `tun_linux.go` via netlink, `tun_darwin.go` via `ifconfig`/`route`, `tun_windows.go` via `netsh`/`route.exe`) gives it `198.18.0.1/24` and the ULA `fd6e:6d65:7267::1/64` and adds two `/1` routes per family (`routes4 = 0.0.0.0/1, 128.0.0.0/1`, `routes6 = ::/1, 8000::/1`). Those beat any `/0` default without touching it, so `Off()` is just deleting them. Default MTU is 9000 (`DefaultMTU`), because TUN traffic never leaves the machine and bigger packets cut CPU about 3x.
+- **Terminate and re-dial.** Every TCP/UDP flow entering the TUN is terminated in gVisor and handed to `tunProxy.DialContext` / `DialUDP`, which call `Balancer.DialPinned` and `Balancer.ListenUDP` (`internal/engine/flowconn.go`, `balancer.go`). `DialTCP` builds a `net.Dialer` with `LocalAddr` set to the chosen adapter's IP **and** `Control: nics.ForceEgress(idx, v6)`. `ForceEgress` is what prevents a routing loop: `IP_UNICAST_IF` on Windows (`nics/egress_windows.go`), `SO_BINDTOIFINDEX` with `SO_BINDTODEVICE` fallback on Linux (`egress_linux.go`), `IP_BOUND_IF`/`IPV6_BOUND_IF` on macOS (`egress_darwin.go`). On macOS a bound socket only consults that interface's *scoped* routes, and the primary service has no scoped default, so `tun_darwin.go` keeps a scoped default route per real adapter in sync every 3 s (`startScopedSync`/`syncScoped`) while capture is on.
+- **IPv6 at the SYN.** `internal/tun/forward.go` replaces tun2socks' forwarders so a refused IPv6 TCP flow gets a RST before the handshake completes (Happy Eyeballs then moves to IPv4) and refused UDP gets ICMP unreachable. The TUN's IPv6 address is a ULA on purpose so RFC 6724 source selection prefers IPv4 for dual-stack sites.
+- **Pause without tearing down on macOS.** `keepDevice = true` in `tun_darwin.go`: `Off()` removes routes but keeps the utun, and `Warm()` creates it early, because creating or destroying a utun makes macOS drop a TetherKit (Android USB) link.
+- **Adapter discovery** (`internal/nics/nics.go` `DiscoverNicsDetailed`): up, non-loopback interfaces, minus virtual ones by name/description regex (`virtualName` includes `tailscale|wintun|net-merge|docker|^wg\d|^tun\d|...`), minus adapters the OS says are not hardware or have no default gateway (`info_linux.go` sysfs `device` link + netlink default routes in any table; `info_darwin.go` `^(en|feth)\d+$` + `DefaultRoutes()` from the routing socket, scoped ones included; `info_windows.go` `GetAdaptersAddresses` ifType whitelist + gateways). Re-scanned every 3 s (`-rescan`). Skips come back with reasons (`[]Skip`) for `net-merge list`.
+
+### 1.2 Scheduler and weights (`internal/engine/sched.go`)
+
+`Scheduler` is weighted least-active-flows, per address family. `AcquireFor(f, skip)` picks, among the best non-empty tier (0 = probed up, 1 = unprobed, 2 = probe failed or link-error cooldown), the slot with the lowest `(activeFlows+1)/weight`, starting from a random index so ties don't resonate with arrival patterns. `Tick(dt)` runs once a second: it reads OS byte counters for every adapter (section 1.5), computes per-family relayed rates, tracks a `peak` per family (decays 3%/s only while in use and underperforming; an idle adapter's estimate drifts back up toward half the best so it keeps getting re-measured), and with auto-weights on sets `weight = max(0.05, peak/maxPeak)`; weights stay equal until every adapter has carried `minMeasuredPeak` (50 KB/s). `-weight Name=3` fixes weights and disables auto for everyone (`SetAuto(c.auto && len(c.weights)==0)` in `cmd/net-merge/main.go`); there is no per-adapter manual override today. Link-level dial errors (`classify()` in `balancer.go`: ENETUNREACH, EADDRNOTAVAIL, ...) sideline an adapter for `FailCooldown` 15 s and retry on another. `Snapshot()` returns `[]SlotStats` with `Name, IP, IP6, State, State6, Weight, Weight6, Present, Active, Total, Failed, BytesIn/Out, RateIn/RateOut` (relayed) and `LinkIn/LinkOut` (OS counters), `Peak/Peak6`.
+
+### 1.3 Probes and captive portals (`internal/engine/probe.go`)
+
+A TCP connect bound to the adapter (same `ForceEgress`) to `1.1.1.1:443` or `8.8.8.8:443` (v6: Cloudflare/Google anycast), 2 s timeout; every 15 s while up, every 4 s while down, immediately for a new adapter or changed address. Honest caveat: this is a TCP handshake, not an HTTP 204 check. A captive portal that answers the SYN and hijacks the TLS/HTTP layer passes this probe, so a hotel Wi-Fi can still receive flows that then fail. Portals that drop unauthenticated traffic at the firewall are caught correctly.
+
+### 1.4 IPv6 policy and autopause
+
+`Balancer.V6Mode` is `auto|on|off` (`balancer.go`). `auto` (the tray checkbox "Use all adapters") only balances IPv6 when `Scheduler.V6CoversAll()` says every adapter that carries IPv4 also carries working IPv6; otherwise IPv6 is refused so apps fall back to IPv4 and every adapter stays in use, at the cost of IPv6-only hosts. Autopause lives in `internal/tray/autopause.go` as a pure state machine (`autoPauser.tick(now, on, usable, active)`): pause after 10 s idle with fewer than two usable connections (2 min if data is still moving, `quietRate` 50 KB/s), resume 3 s after two connections work, never more than one automatic switch per 30 s, and a manual pause is never undone (`userSet`, `manualOff`). It is thoroughly tested (`autopause_test.go`) but packaged under `tray`, so a headless helper needs it moved.
+
+### 1.5 Per-interface speed (`internal/nics/counters_*.go`)
+
+`Octets(idx)` reads the kernel's byte counters for an adapter: Linux `/sys/class/net/<name>/statistics/rx_bytes|tx_bytes`; macOS `syscall.RouteRIB(NET_RT_IFLIST2)` parsing `if_msghdr2` (64-bit `ibytes`/`obytes` at offsets 96/104); Windows `GetIfEntry2Ex` `InOctets/OutOctets`. `Scheduler.Tick` samples them every second into `linkRateIn/Out` with a counter-reset guard. These count **every app's traffic** on the adapter, which is exactly the "total combined speed" Andrew wants and is why the tray shows real speeds even while paused. They also include Lychee's own streams (see section 7 on double counting).
+
+### 1.6 Tray UI contents (`internal/tray/tray.go`)
+
+Header: `Merging · Total ↓X ↑Y Mbps` / `Paused` / `Paused: one connection` / `Error: …`. Up to `trayRows = 4` adapter rows: `name: ↓X ↑Y Mbps (N flows via net-merge) - <state> +IPv6`. Checkboxes "Use all adapters (IPv6 only if every adapter has it)" and "Pause when there is only one connection", a "Start merging"/"Pause merging" item, "Quit". Hover tooltip trimmed to 63 UTF-16 units for Windows (`trayTooltip`). Green/grey icon drawn in `internal/icon`. Refresh once a second. Everything the GUI page needs is in `SlotStats` plus the autopause word.
+
+### 1.7 CLI/IPC surface: files, not sockets (`internal/state/state.go`)
+
+`net-merge on|off|quit|status` talk to the running tray through a per-user directory (`DefaultDir()`: `%LOCALAPPDATA%\net-merge` on Windows, `~/.cache/net-merge` on Linux, fixed root-owned `/var/run/net-merge` on macOS). While ON, `boot()` writes `status.json` once a second (`Status{PID, Mode, V6, Since, Updated, NICs []SlotStats}`); `Read` treats it as live only if `Updated` is under 3 s old; `Clear` removes it on OFF. Commands are empty marker files in a sticky world-writable `ctl/` (`SendMarker`/`TakeMarker` for `on`, `off`, `quit`), polled every second by the tray loop and every 300 ms by `run`. Single-instance detection (`internal/platform/platform_*.go`): a `Global\net-merge` mutex, a Linux abstract unix socket `@net-merge`, or a flock on `/var/run/net-merge.lock`. Consequences for us: there is no status while paused, no runtime toggles for IPv6/autopause/include/weights, no "why did it fail" channel, and no auth beyond directory permissions. **A JSON control channel is a prerequisite for a good GUI and must be added** (section 9).
+
+### 1.8 Privileges per OS (`internal/platform`)
+
+Windows: `IsAdmin()` is the elevated token; `RelaunchElevated` is `ShellExecute runas`; `CheckDriver` requires `wintun.dll` next to the exe; autostart is a scheduled task with `RunLevel HighestAvailable` so sign-in start needs no UAC (`autostart_windows.go`). macOS: root (`Geteuid()==0`); GUI elevation via `osascript "do shell script … with administrator privileges"`; `sudo net-merge install` copies the binary root-owned to `/usr/local/bin/net-merge` (refusing if any parent dir is writable by non-root, `copyRootOwned`) and writes `/etc/sudoers.d/net-merge` allowing exactly `net-merge tray` and `net-merge cleanup` without a password, validated with `visudo -cf` (`install_darwin.go`); `RelaunchTray` uses `sudo -n` when that rule exists. Linux: `IsAdmin()` reads `CapEff` for `CAP_NET_ADMIN`; packages run `setcap cap_net_admin,cap_net_raw+ep` in `packaging/postinstall.sh`; the tray refuses to run as root because the StatusNotifierItem lives in the user's D-Bus session (`RelaunchTray` in `platform_linux.go`); `run` elevates with `sudo` or `pkexec`.
+
+### 1.9 Crash safety
+
+The TUN is a file descriptor: when the process dies the kernel removes the adapter and every route on it (Linux TUN, macOS utun, Wintun). `scripts/linux-e2e.sh` and `scripts/macos-smoke.sh` verify `kill -9` leaves the machine with internet. What survives a crash: macOS scoped default routes (`cleanupScoped` removes them on the next start and `net-merge cleanup` does it by hand) and, on Windows, possibly routes on a surviving adapter (`CleanupStale`). `cmdTray` also closes the TUN on SIGINT/SIGTERM. The Inno installer kills a running instance before replacing files precisely because this is safe.
+
+### 1.10 License and third-party notices
+
+net-merge is MIT (Rohit Mahto, 2026). `THIRD-PARTY-NOTICES.md`: tun2socks (MIT), gVisor netstack (Apache-2.0), wireguard-go and wintun-go (MIT), fyne.io/systray (Apache-2.0, not needed for a headless helper), vishvananda/netlink (Apache-2.0), golang.org/x (BSD-3). Wintun's `wintun.dll` is a prebuilt, WireGuard LLC-signed driver under its own "Prebuilt Binaries License"; `scripts/fetch-wintun.ps1` downloads v0.14.1, pins its SHA-256, checks the Authenticode signer, and ships `wintun-LICENSE.txt` beside it. If we vendor or ship the helper we must: keep net-merge's MIT notice, reproduce Apache-2.0 NOTICE requirements for gVisor/netlink, ship the Wintun license text next to the unmodified DLL, and add all of this to Lychee's `NOTICE` and About popover (`AboutPopover.tsx` already credits Plexo and Lightning). Go embeds licenses only as text if we add them, so a generated `THIRD-PARTY-NOTICES-helper.md` belongs in `extraResources` too.
+
+---
+
+## 2. Lychee architecture relevant to this
+
+- **Stack.** Electron 44 + React 19 + TypeScript, electron-vite, Zustand store, Tailwind v4, Base UI (`package.json`, `electron.vite.config.ts`). Main is bundled as CommonJS. `koffi` is the FFI used on Linux (`SO_BINDTODEVICE`) and Windows (`download/sparseFile.ts`); `electron-builder.yml` only ships koffi prebuilds for `linux_x64|linux_arm64|win32_x64|win32_arm64`.
+- **How downloads bind to interfaces.** `src/main/network/routes.ts`: `StreamConnection` owns keep-alive HTTP/HTTPS agents whose `createConnection` is `connectOnInterface()`, a Happy-Eyeballs race over `routesFor(iface, resolvedAddresses)`; each candidate socket comes from `connectRoute()` in `deviceBinding.ts`. On Linux that opens a raw libc socket, sets `SO_BINDTODEVICE`, and hands the fd to Node (`deviceBindingSupported()` probes kernel ≥ 5.7, else falls back). On macOS and Windows it is a plain `net.connect({ localAddress })`, trusting the OS to route by source address. Torrents go through the same `connectRoute` via a patched webtorrent `connect` hook (`torrent/torrentTransfer.ts connect()`, `patches/webtorrent+3.0.21.patch`), with uTP/WebRTC/web seeds disabled (`torrent/engine.ts`).
+- **How per-network speed is measured.** Per download: `Meters` in `download/transfer.ts` count bytes as they arrive (`HttpTransfer.onNetworkProgress`, `wire.on('piece')`) and are read on the 500 ms tick in `DownloadManager.run` (`updateSpeeds`, 3 s window). Once a second `sampleSpeeds` appends to `state.speedHistory` (60 samples, `SPEED_HISTORY_SECONDS`). Nothing reads OS counters; Lychee only knows its own bytes.
+- **Existing network UI.** `NetworksMenu.tsx` (header popover): every interface with name, OS name badge, limits, and the summed speed of running downloads on it plus a total in the trigger. `NetworkRow.tsx` (per-download table with streams/peers expansion). `ThroughputChart.tsx` (stacked area per network over 60 s, hover readout, `speedTicks`). `CombineDiagram.tsx` (links converging into one stream). `NetworkEditPopover.tsx` (rename/recolor, persisted in `networkPreferences`). `useNetworkVisuals` assigns colors by interface id across the whole app. `DownloadsSidebar.tsx` (this branch) with Status and File type sections; `useAppStore.view` is `{name:'list'} | {name:'download', id}`.
+- **Interface list.** `src/main/network/interfaces.ts` `listActiveInterfaces()`: `os.networkInterfaces()` minus internal/link-local, labels from `networksetup -listallhardwareports` (macOS) and `Get-NetAdapter` (Windows), kind from names/descriptions. It does **not** filter VPNs or virtual adapters (Tailscale's utun with 100.x shows up as "other"), and the id is the OS device name. `NetworkMonitor` polls every second and pushes `IpcChannels.networksChanged`.
+- **Settings and IPC.** `settings.ts` whitelists fields in `app-settings.json` (`sanitizeSettings`); `InitialState` is read synchronously in `preload/index.ts`; typed channels in `shared/ipc-channels.ts` and `shared/ipc-contract.ts`, handlers in `ipc/handlers.ts`, store persistence via `persist()` in `useAppStore.ts`. e2e tests (`e2e/fixtures.ts`) drive `window.lychee` and use env knobs from `testKnobs.ts` (`LYCHEE_E2E_INTERFACES` fakes the interface list).
+- **Platforms, packaging, updater.** Windows x64+arm64 in one NSIS assisted installer (`nsis.oneClick: false`, `build/installer.nsh`); macOS dmg+zip per arch, ad-hoc signed by default (`identity: '-'`, `hardenedRuntime: false`), Developer ID + notarization when secrets exist (`.github/workflows/release.yml`); Linux AppImage/deb/rpm x64+arm64. `asarUnpack: resources/**`, `afterPack: scripts/check-torrent-package.mjs` (a precedent for packaging assertions). Updates via `electron-updater` generic provider `https://cdn.tame.gg/lychee/` (`updater.ts`): installable on Windows always, macOS only with Developer ID, Linux only AppImage.
+- **Lifecycle.** `main/index.ts`: `before-quit` calls `downloadManager.suspendAll()` with a 3 s force-exit; `window-all-closed` quits on Windows/Linux unless the browser extension was used, in which case Lychee stays in an Electron `Tray`. The README states Lychee "needs no virtual adapter, VPN, kernel extension, or administrator rights", which this feature changes for an opt-in mode.
+
+---
+
+## 3. Integration options
+
+### A. Go sidecar helper (recommended)
+
+Ship net-merge's engine as a headless binary per platform/arch under `extraResources` (`resources/helper/net-merge[.exe]` plus `wintun.dll` and license files on Windows). Lychee's main process launches it elevated (section 4), talks to it over a local control channel, and renders its status. Everything that makes net-merge work (TUN, gVisor, egress pinning, probes, weights, autopause) is reused verbatim; the only engine code we touch is a new `helper` subcommand and moving `autoPauser` out of `internal/tray`.
+
+Stopgap that needs **zero** upstream changes (phase 0, section 9): launch `net-merge run -include … -state-dir <lycheeUserData>/net-merge` and use the file protocol: poll `status.json` at 1 Hz, drop `ctl/off|quit` markers. It proves the UX but has the limits listed in 1.7 (no status while paused, no runtime toggles, `run` has no autopause). The real thing is phase 1.
+
+Pros: battle-tested engine, every app and protocol covered (TCP, UDP, v4, v6), crash-safe by construction, CPU ~0.18 cores per 100 Mbit/s. Cons: admin/root/capabilities; a driver on Windows; two binaries to version together; signing/notarization of a Go binary; a Go toolchain in Lychee's release pipeline (or pinned release artifacts).
+
+### B. Port the engine to TypeScript/Node (not feasible)
+
+Opening the device is the easy part (koffi could `open("/dev/net/tun")`, do the macOS `PF_SYSTEM`/utun dance, or load `wintun.dll`). The hard part is the userland TCP/IP stack: gVisor netstack implements TCP (congestion control, SACK, retransmission, window management) and a UDP NAT, and there is no production-quality JavaScript equivalent. Even if one existed, pushing hundreds of Mbit/s of 9000-byte packets through the Electron main process's single event loop would starve the download engine that lives in the same process. And the whole Electron app would have to run as root/admin, which is unacceptable (Chromium refuses to run as root on Linux without disabling the sandbox, and it would put the renderer behind an admin token). A worker-thread or child Node process does not change the stack problem. Rejected.
+
+### C. System proxy mode (fallback, lower privilege)
+
+net-merge already has `net-merge socks` (`engine.ServeSocks5`, CONNECT only, no UDP ASSOCIATE, no admin). Lychee would set the OS proxy to `socks5://127.0.0.1:1080` and revert it later: Windows per-user WinINET registry (`ProxyEnable`/`ProxyServer`/`ProxyOverride`) plus `InternetSetOption` refresh; macOS `networksetup -setsocksfirewallproxy <service>` per service (needs admin anyway on modern macOS); Linux `gsettings org.gnome.system.proxy` / KDE `kioslaverc` / env vars. Honest limits: only apps that honor the system proxy (browsers yes; many games, launchers, updaters, CLI tools no); no UDP, so QUIC falls back to TCP and DNS stays on the default route; many Windows apps want an HTTP proxy, so we would add an HTTP CONNECT front end to the Go side (~150 lines); a bypass list for LAN/private ranges is mandatory. Crash safety is worse than TUN: a stale proxy setting makes every proxy-aware app offline until reverted (section 5). Worth building only as "browser-only mode" for users who cannot elevate, or if a platform's elevation story proves untenable.
+
+### D. Lychee-only (status quo)
+
+Per-download multi-stream, per-network binding, per-network limits and charts for Lychee's own transfers. No admin. It does not meet "systemwide", but it remains the default and the Network page must show these numbers too (as "Lychee" rows) when the helper is off.
+
+**Decision: A, with C as the fallback and D as the default mode.** Sequence: A-phase-0 to validate UX on Andrew's machines, A-phase-1 with the control protocol, then decide on C from real demand.
+
+---
+
+## 4. Privileges, installers and the updater
+
+Common to all: the helper lives at `process.resourcesPath/helper/` (electron-builder `extraResources` with `${os}`/`${arch}` macros, one directory per target; `afterPack` assertion like `check-torrent-package.mjs` that the right-arch binary exists). Lychee passes `--control <path>` and checks the `version` handshake against the bundled version; a mismatch is shown as "Network helper is out of date" with a repair action.
+
+**Windows (NSIS, x64 and arm64).** Wintun adapter creation and `route add` need an elevated process. Three ways, in order of preference: (1) first enable triggers one UAC (`ShellExecute runas`, as `platform.RelaunchElevated` does) that creates a scheduled task with `RunLevel HighestAvailable` whose action is the bundled helper (exactly net-merge's `autostart_windows.go` `taskXML`); afterwards `schtasks /Run` starts the elevated helper without a prompt. (2) UAC every time merging is turned on; simplest, annoying. (3) A Windows service installed by the installer; not viable because Lychee's assisted installer can be per-user and the auto-updater runs unelevated. Elevated children cannot inherit stdio pipes from an unelevated parent, so the control channel is a named pipe `\\.\pipe\lychee-netmerge-<sid>` created by the helper with a DACL for the launching user's SID (UAC keeps the same user). The helper must be stopped before an update replaces files (file locks): `before-quit` sends `quit`, waits ≤ 1 s, kills if needed; the TUN dies with it either way. Wintun needs `wintun.dll` next to the exe and an arm64 build of both (`fetch-wintun.ps1` fetches amd64 only today; the zip also has `bin/arm64`). Unsigned helpers mean a yellow "Unknown publisher" UAC and SmartScreen; code signing (which Lychee lacks too) is the real fix. Verify electron-builder signs exes under `resources/` when a certificate is configured; if not, add a sign step.
+
+**macOS (dmg, per arch).** Root is required for the utun and routes. Options: (1) `osascript … with administrator privileges` each time merging is enabled (what net-merge does from a GUI); one password per Lychee session if the helper stays running and pause only drops routes (which it does, `keepDevice`). (2) net-merge's `install` pattern: copy the helper root-owned to `/Library/PrivilegedHelperTools/gg.tame.lychee.net-merge` and write `/etc/sudoers.d/lychee-netmerge` allowing exactly `<path> helper` without a password; one admin prompt at setup, none afterwards. `copyRootOwned` rightly refuses user-writable parents, and `/Applications/Lychee.app` is typically user-owned, so the copy must leave the bundle. Updates do not update the root-owned copy, so Lychee compares the helper's `version` with the bundled one and offers "Update network helper" (one admin prompt). (3) The Apple way: `SMAppService`/`SMJobBless` privileged LaunchDaemon with `SMPrivilegedExecutables`/`SMAuthorizedClients` pairing. It requires the app and helper to be signed with the same Developer ID, which the ad-hoc default build is not, and a native shim to call the API from Electron. Recommend (2) now, (3) once signing lands. Peer auth: the sudoers rule allows no arguments, so the helper authenticates clients by `LOCAL_PEERCRED` uid equal to `SUDO_UID`; the socket goes in root-owned `/var/run/lychee-netmerge/` (same reasoning as net-merge's `/var/run/net-merge`). Hardened runtime and notarization: list the helper under `mac.binaries` in `electron-builder.yml` so osx-sign signs it; Go binaries are fine under hardened runtime.
+
+**Linux (AppImage, deb, rpm).** The helper needs `CAP_NET_ADMIN` (and `CAP_NET_RAW` before kernel 5.7). deb/rpm: an `afterInstall` script running `setcap cap_net_admin,cap_net_raw+ep <resources>/helper/net-merge` (mirrors `packaging/postinstall.sh`; capabilities are dropped when the file is replaced, so it runs on every upgrade). AppImage: the squashfs is mounted `nosuid`, so file capabilities are ignored; use `pkexec <abs path> helper` (polkit GUI prompt) once per Lychee session. `/dev/net/tun` must exist (`CheckDriver`). With setcap the helper runs as the user and the control socket is simply `$XDG_RUNTIME_DIR/lychee/netmerge.sock`; with pkexec it runs as root and checks `SO_PEERCRED` against `PKEXEC_UID`. Firewalls: trust the `net-merge` interface in firewalld/ufw, as net-merge's README and `nix/module.nix` do. Electron's own `Tray` already handles StatusNotifierItem, so none of net-merge's tray code is needed.
+
+**Updater interactions.** Helper path is stable across updates on all three OSes (inside the install dir/bundle). Windows: stop the helper before `quitAndInstall`. macOS sudoers variant: a separate root-owned copy with its own update prompt. Linux deb/rpm: postinst re-applies caps; AppImage: nothing to do. Always: `version` handshake, and refuse to turn merging on with a mismatched helper.
+
+---
+
+## 5. Crash safety and revert
+
+**TUN mode.** Nothing to revert by design: adapter and routes vanish with the process (verified by net-merge's own e2e). Lychee adds: (a) on every helper start the engine already calls `CleanupStale()` (stale routes, macOS scoped defaults); (b) a watchdog in `MergeController`: if the control connection drops without a `quit` ack, state becomes "Helper stopped unexpectedly" with a Restart action and the last 60 s of history kept; (c) a "Repair network" action that runs `cleanup` (elevated) for the macOS scoped-route residue; (d) helper logs under `userData/logs/net-merge.log` (`-log` flag) and an "Export diagnostics" that bundles the log with the helper's adapter list and skip reasons.
+
+**Proxy mode (if built).** The proxy setting outlives both processes, so: a revert journal in `userData/proxy-revert.json` written *before* changing anything (previous values per Windows user / per macOS service / per gsettings key); restore on Lychee startup if the journal exists and no helper is running; a detached guardian process that waits for Lychee's PID to exit and restores from the journal; a visible "Turn off and restore proxy" panic button; and never set a proxy without a bypass list. Document that a hard power cut can still leave the setting until Lychee next runs.
+
+---
+
+## 6. The GUI: a "Network" page in the sidebar
+
+**Navigation.** Add `{ name: 'network' }` to `View` in `useAppStore.ts`; a new "System" (or top) section in `DownloadsSidebar.tsx` with one item "Network" and a status dot (teal while merging, grey otherwise, amber for needs-permission/error); `App.tsx` renders `<NetworkScreen/>` for that view. Wording in the UI: "Combine connections" rather than "net-merge"; About popover credits net-merge.
+
+**Hero band** (reuse `HeroBand`, extract `BigStat` from `DownloadingScreen.tsx` into `components/BigStat.tsx`): left, `CombineDiagram` fed with every present adapter's live OS-counter download rate and the combined total (same component the download screen uses); center, `BigStat` "TOTAL ↓" with the total of `LinkIn` across present adapters and an "↑" line, plus the status word; right, `ThroughputChart` with `order` = present adapters and `historyByInterface` = a 60-sample ring kept in the main process from `LinkIn` (and a second chart or toggle for upload). This is "total combined speed" plus "speed from each source", exactly as the tray does it, but as a live chart.
+
+**Master toggle** (ui/switch) with an explicit state label driven by a state machine in main: `Merging` · `Paused` · `Paused: one connection` (autopause `waiting && !manualOff`) · `Starting…` · `Needs permission` (UAC declined 1223 / osascript -128 / pkexec 126) · `Helper not installed` (macOS sudoers variant not set up, or Linux without caps and no pkexec) · `Helper out of date` · `Unsupported here` (no `/dev/net/tun`, no `wintun.dll`) · `Error: …` (last helper error, e.g. "route add … File exists" when Tailscale's exit node holds the same /1 routes).
+
+**Adapter rows** (a new `MergeNetworkRow`, borrowing the grid and cells from `NetworkRow.tsx`, keyed by interface id which equals net-merge's adapter `Name` on all three OSes): color dot and `visual.name` from `useNetworkVisuals` (so colors match the download screens), kind icon from `NetworkInterfaceInfo.kind` (Wi-Fi/Ethernet/USB tether; hotspot shows as Wi-Fi or USB depending on how the phone is connected), OS name badge, `↓ ↑` from `LinkIn/LinkOut`, flows count (`Active`, with `Total` in a tooltip), internet status from `State/State6` (`checking` / `up` / `no internet`, `+IPv6` badge), enable toggle (helper include/exclude), weight cell showing `Weight` with the measured `Peak` in a tooltip and a popover to pin a manual weight. Below, an "Also seen but not used" list from the helper's skip reasons (Tailscale, bridges, no gateway), which answers the most common support question for free. `NetworkEditPopover` stays for rename/recolor.
+
+**Options:** "Use IPv6 only when every connection has it" (V6Auto vs V6On), "Pause by itself when only one connection works" (autopause), "Keep merging while Lychee is in the tray". Persisted in `app-settings.json` as `merge: { enabled, ipv6, autoPause, excluded: string[], weights: Record<string, number> }`, whitelisted in `sanitizeSettings`, mirrored into `InitialState` so the page paints correctly on first render.
+
+**Data flow.** Helper → 1 Hz JSON status over the control socket → `src/main/network/merge/helperClient.ts` (protocol, reconnect) → `MergeController` (state machine, history ring, settings, elevation) → push `IpcChannels.mergeStateChanged` (≤ 1 Hz, only when changed, like `UI_UPDATE_MS` batching) → `preload` `onMergeState` + `mergeState()` snapshot → `useAppStore.merge` slice → `NetworkScreen`. Commands go renderer → `window.lychee.setMerging(on)` / `setMergeOptions(patch)` / `setMergeNetwork(id, enabled)` / `repairNetwork()` → `handlers.ts` → controller → helper. The e2e suite gets a fake helper (`LYCHEE_E2E_MERGE_HELPER=<script>`, ignored when packaged like every `testKnobs` entry) that speaks the protocol and emits scripted statuses.
+
+---
+
+## 7. Coexistence with the download engine
+
+**Do Lychee's bound sockets bypass the TUN?** Linux: yes on kernels ≥ 5.7, because `SO_BINDTODEVICE` restricts route lookup to that device (this is the same mechanism net-merge relies on). On older kernels Lychee falls back to `localAddress` only (`deviceBindingSupported()` false, `NetworkBindingDialog`), and those streams would be captured and re-balanced by the helper; acceptable, but the UI should say so. macOS and Windows: **unverified, and the single most important thing to test on Andrew's machines before anything ships.** Lychee binds only `localAddress`. net-merge's own code says a socket bound to an adapter does a scoped lookup on macOS and falls through to the unscoped table (where the /1 routes live) unless a scoped default exists, which is why it maintains scoped defaults while ON; whether an implicitly bound socket (no `IP_BOUND_IF`) gets the same treatment is the open question. Windows' strong-host send model should constrain the lookup to the source interface, but net-merge still sets `IP_UNICAST_IF` "even if the TUN's routes match". Plan: add `IP_BOUND_IF` (macOS) and `IP_UNICAST_IF` (Windows) to `connectRoute()` via koffi, mirroring `nics/egress_darwin.go` and `egress_windows.go` (koffi prebuilds for darwin must then be shipped too), and verify with the helper ON that each Lychee stream's source IP is the adapter's own and that `Active` flows in the helper do not jump when Lychee downloads. If pinning fails, Lychee's per-network attribution and limits are meaningless while merging, so this gates the feature.
+
+**Hide the TUN from Lychee.** The helper's adapter (`net-merge` on Linux/Windows, `utunN` on macOS, address `198.18.0.1`) appears in `os.networkInterfaces()` and would be offered as a download network in `NetworksMenu`/`NewDownloadDialog`. Filter it in `listActiveInterfaces()` by the helper-reported adapter name and by the `198.18.0.0/24` and `fd6e:6d65:7267::/64` prefixes.
+
+**Double counting.** OS counters include Lychee's own bytes. The Network page shows OS totals (that is the point: everything on the machine). Each row can add a quiet "Lychee X of Y" using the per-network sum `NetworksMenu` already computes; the download screens and `NetworksMenu` keep showing Lychee-only speeds and get a "Lychee" label so the two totals are not confused. Never add the helper's `RateIn` (relayed) to Lychee's meters: Lychee's streams are not relayed.
+
+**Per-network limits and data caps.** `Limits.take()` meters only Lychee's bytes, so a phone hotspot's data limit in Lychee says nothing about Steam using it through the helper. Offer "Exclude from merging when its data limit is reached" (hook `limitReached` → helper exclude) and state the caveat on the Network page and in Speed & data limits.
+
+**Torrents.** Peer connections are pinned via `connectRoute` (same verification as above). Incoming peers arrive on each adapter's own address and are untouched. The DHT and tracker sockets are unbound, so they enter the TUN while merging; each is one UDP socket, so it is pinned to one adapter for its life (`udpSessionTimeout` 30 s idle) and keeps working. Lychee's `probeUrl`, DNS (`dns.lookup`), updater and bridge are unbound too; they are balanced like any other app's traffic, which is fine.
+
+**Lifecycle.** If merging is on and the window closes on Windows/Linux, today the app quits (`window-all-closed`) and merging would stop. Reuse the existing tray path (`keepsRunningForBrowser`) with a "keep merging in the tray" setting, and show merging state in the tray menu. On quit, `before-quit` must stop the helper inside the existing 3 s budget.
+
+---
+
+## 8. Risks
+
+- **VPNs, Tailscale in particular (installed on these machines).** The helper skips `tailscale0`/utun by name and lack of hardware, and Tailscale's own routes (100.64/10, per-peer /32) are more specific than /1, so normal Tailscale use is unaffected. Exit-node mode is the conflict: on Linux Tailscale uses policy routing (table 52) that wins over the main table, so merging silently does nothing; on macOS/Windows Tailscale installs its own `0/1` and `128/1` routes, colliding with net-merge's (one `route add` fails, or whoever adds last wins). Detect `tailscale status --json` exit-node state or existing /1 routes before enabling and refuse with a clear message. MagicDNS (100.100.100.100) is unaffected.
+- **Captive portals** pass the TCP-only probe (1.3). Add an HTTP 204 probe upstream; let users exclude an adapter.
+- **DNS.** Queries to on-link resolvers (router, hotspot gateway) are not captured; queries to public resolvers are balanced and may leave via either ISP. Each ISP sees part of the DNS and traffic; that is inherent to merging and belongs in the feature's disclosure text.
+- **Sites tying sessions to IP.** Each connection may exit from a different public IP, so some logins and CAPTCHAs break (documented by net-merge). A per-destination affinity would help but reduces balance; upstream idea, not in scope.
+- **IPv6-only hosts** unreachable in `auto` when adapters differ; the toggle exists and must be explained.
+- **Hotspot data caps and battery.** Merging sends every app's traffic over the phone: Windows Update, cloud sync, Steam. Make the warning conspicuous, default autopause on, and provide one-click exclusion.
+- **macOS TetherKit drop** on utun create/destroy: handled by net-merge's `keepDevice`/`Warm()`, but the helper must start before the Android phone is connected; show the hint.
+- **Firewalls and antivirus.** Windows classifies the adapter as an unidentified (public) network; the fixed Wintun GUID keeps one profile. Unsigned Go binaries creating TUN adapters are a classic false-positive; sign both executables, never pack with UPX.
+- **Enterprise policies.** No admin, MDM-managed Macs, AppLocker: degrade to "Needs permission"/"Unsupported here" and offer mode C or nothing.
+- **Apps ignoring the proxy** only matter for mode C.
+- **Another net-merge instance.** A user who installed net-merge standalone holds the single-instance lock; detect `InstanceRunning()` and say so.
+- **Positioning and support.** Lychee's README promise of no admin and no virtual adapter becomes "optional system-wide mode needs admin"; expect "my internet broke" tickets even though a crash cannot leave the machine offline. Diagnostics export and "Repair network" are the mitigation.
+- **Latency and CPU.** All traffic traverses userland; a few hundred microseconds and ~0.18 cores per 100 Mbit/s. Gaming/VoIP users should be told.
+
+---
+
+## 9. Phased PR breakdown and open questions
+
+Each PR is small, has tests, and lands on top of `s3/sidebar`.
+
+**Upstream net-merge (or a tame-gg fork; MIT allows either).**
+- NM-1: move `autoPauser` from `internal/tray` to `internal/control` unchanged, tests move with it.
+- NM-2: `net-merge helper --control <path>` subcommand: headless, JSON-lines over a unix socket / named pipe with peer-credential auth; pushes `status` at 1 Hz always (not only while ON) with `SlotStats`, skip reasons from `DiscoverNicsDetailed`, autopause word, V6 state, TUN adapter name, version; accepts `on`, `off`, `quit`, `set-ipv6`, `set-autopause`, `exclude`/`include` (runtime mutable include set feeding `Scheduler.Update`), `set-weight <name> <w|auto>` (per-slot override, today all-or-nothing), `cleanup`. Must not `die` with zero adapters. Test: a Go test speaking the protocol against a scheduler with loopback-alias NICs, like `socks5_test.go`; keep the file protocol for compatibility.
+- NM-3: windows/arm64 build and `fetch-wintun.ps1` arm64 DLL; release artifacts named per OS/arch with checksums Lychee's fetch script can pin.
+- NM-4 (optional): HTTP 204 captive-portal probe. NM-5 (optional, for mode C): HTTP CONNECT proxy front end next to SOCKS5.
+
+**Lychee.**
+- L-1: `scripts/fetch-net-merge.mjs` (pinned tag + sha256 → `build/helper/<os>-<arch>/`), `extraResources` + `mac.binaries` in `electron-builder.yml`, `afterPack` arch assertion, `NOTICE`/About credits, THIRD-PARTY notices file. Test: CI packaging step (`electron-builder --linux dir`) asserts the helper is present.
+- L-2: `src/main/network/merge/` (`helperClient.ts`, `mergeController.ts`, `elevate.ts`), new IPC channels/contract/preload entries, settings fields. Test: e2e with the fake helper asserting state transitions, pushes, and settings persistence through `window.lychee`.
+- L-3: hide the TUN in `listActiveInterfaces()`. Test: `LYCHEE_E2E_INTERFACES` with a `198.18.0.1` entry is filtered; `NetworksMenu` never lists it.
+- L-4: egress pinning hardening in `deviceBinding.ts` (`IP_BOUND_IF`, `IP_UNICAST_IF` via koffi; darwin koffi prebuilds). Test: `network.spec.ts`-style unit test that the option is set; plus the manual matrix in the appendix.
+- L-5: renderer `NetworkScreen.tsx`, sidebar entry and `View`, store slice, `BigStat` extraction, `MergeNetworkRow`. Test: Playwright UI test driven by fake-helper statuses (rows, totals, toggles, every status word).
+- L-6: elevation per OS (Windows task + UAC, macOS privileged copy + sudoers with "Install/Update helper", Linux pkexec + deb/rpm `afterInstall` setcap). Tests: Linux root smoke adapted from net-merge's `scripts/linux-e2e.sh` (veth second uplink, helper driven through Lychee's main-process API) in a nightly job; Windows/macOS manual checklists.
+- L-7: lifecycle: keep-alive in tray while merging, `before-quit` stop, watchdog, "Repair network", logs and diagnostics export.
+- L-8: coexistence polish: "Lychee X of Y" per row, data-limit auto-exclude option, Tailscale exit-node detection, README and disclosure text.
+- L-9 (later, if wanted): mode C with the revert journal and guardian.
+
+**Open questions for Andrew.**
+1. Should merging keep running when the Lychee window is closed (tray) and should it survive quitting Lychee at all, or is "on only while Lychee runs" the intended model?
+2. macOS privilege path: a password each session, a one-time sudoers install with its own update prompt, or wait for Developer ID signing and do a proper `SMAppService` daemon?
+3. Upstream PRs to rohit267/net-merge or a tame-gg fork? Either way, how prominently to credit net-merge in the UI.
+4. Defaults: merging off until opted in (recommended), autopause on, IPv6 `auto`.
+5. Should a network's Lychee data limit also exclude it from system-wide merging when reached?
+6. Is Windows arm64 for the helper required for the first release?
+7. Is a no-admin proxy mode (C) wanted at all, or is "needs admin" acceptable for this feature?
+8. Tailscale exit node active: refuse to merge, or merge with a warning?
+9. Sidebar "Network" page versus a status-bar button like today's `NetworksMenu`; the page is assumed above.
+
+---
+
+## Appendix: what I could not verify from code alone
+
+- macOS and Windows: whether Lychee's `localAddress`-only sockets stay on their adapter while the /1 capture routes exist (section 7). Test on each machine: enable the helper, run a two-network download, check `netstat`/`lsof` source addresses and that the helper's `Active` count does not include Lychee's streams.
+- Whether electron-builder signs executables placed under `resources/` on Windows and macOS without extra configuration (`mac.binaries` is the documented knob for macOS).
+- Tailscale's exact route set on macOS/Windows in exit-node mode on these machines (`netstat -rn | grep -E '^(0/1|128.0/1)'`).
+- The exact wording of the Wintun Prebuilt Binaries License for redistribution inside another installer; read `wintun-LICENSE.txt` from the fetched zip before shipping.
+
+## Security requirements (from review)
+
+- macOS sudoers rule names only the exact helper path; the helper binary and every parent directory must be root-owned and not user-writable. Lychee verifies this before enabling merging and refuses otherwise.
+- Helper control channel is a Unix domain socket (macOS/Linux) or named pipe (Windows) restricted to the logged-in user, with peer credential checks and a strict command allowlist. No localhost TCP port.
+- The test that pins Lychee's own connections to their adapter while merging is active lands early in the stack.
