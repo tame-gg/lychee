@@ -3,15 +3,11 @@ package control
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"net"
-	"os"
 	"runtime"
 	"sync"
 	"time"
-
-	"github.com/tame-gg/lychee/native/netd/internal/engine"
 )
 
 type PeerInfo struct {
@@ -133,6 +129,10 @@ type Server struct {
 	statsCh   <-chan time.Time
 	tickCh    <-chan time.Time
 	stallCh   <-chan time.Time
+	quitCh    <-chan time.Time
+
+	pendingQuit bool
+	stopped     bool
 
 	shutOnce sync.Once
 	exitCode int
@@ -296,6 +296,9 @@ func (s *Server) sendCore(m any) {
 
 func (s *Server) runLoop() {
 	for {
+		if s.stopped {
+			return
+		}
 		var intake chan []byte
 		var wnote chan noteKind
 		if s.session != nil {
@@ -305,42 +308,37 @@ func (s *Server) runLoop() {
 		select {
 		case <-s.shutdown:
 			s.doShutdown(0)
-			return
 		case <-s.startupCh:
 			s.logf("info", "no client connected")
 			s.doShutdown(0)
-			return
 		case <-s.graceCh:
 			s.logf("info", "client gone")
 			s.doShutdown(0)
-			return
+		case <-s.quitCh:
+			s.quitCh = nil
+			if s.pendingQuit {
+				s.doShutdown(0)
+			}
 		case <-s.tickCh:
 			s.tickCh = s.clock.After(time.Second)
 			s.onTick()
 		case <-s.statsCh:
 			s.onStatsTick()
 		case <-s.stallCh:
-			s.stallCh = nil
-			if s.session != nil {
-				s.logf("info", "write stalled, closing client")
-				s.dropSession()
-			}
+			s.onStall()
 		case m := <-s.core:
-			if s.handleCoreMsg(m) {
-				return
-			}
+			s.handleCoreMsg(m)
 		case line, ok := <-intake:
-			if !ok {
-				continue
+			if ok {
+				s.onFrame(line)
 			}
-			s.onFrame(line)
 		case n := <-wnote:
 			s.onWnote(n)
 		}
 	}
 }
 
-func (s *Server) handleCoreMsg(m any) (stop bool) {
+func (s *Server) handleCoreMsg(m any) {
 	switch v := m.(type) {
 	case msgConnArrived:
 		s.startupCh = nil
@@ -356,7 +354,6 @@ func (s *Server) handleCoreMsg(m any) (stop bool) {
 			s.onOverflow(v.line)
 		}
 	}
-	return false
 }
 
 func (s *Server) onClaim(m msgClaim) {
@@ -405,6 +402,14 @@ func (s *Server) dropSession() {
 	}
 }
 
+func (s *Server) onStall() {
+	s.stallCh = nil
+	if s.session != nil {
+		s.logf("info", "write stalled, closing client")
+		s.dropSession()
+	}
+}
+
 func (s *Server) reader(sess *session) {
 	for {
 		line, err := sess.fr.read()
@@ -448,6 +453,9 @@ func (s *Server) onWnote(kind noteKind) {
 		s.stallCh = nil
 	} else {
 		s.stallCh = s.clock.After(WriteStall)
+	}
+	if s.pendingQuit && s.session.pendingWrites == 0 {
+		s.doShutdown(0)
 	}
 }
 
@@ -564,6 +572,10 @@ func (s *Server) onTick() {
 }
 
 func (s *Server) doShutdown(code int) {
+	if s.stopped {
+		return
+	}
+	s.stopped = true
 	s.quitting = true
 	if s.eng.IsOn() {
 		s.eng.Off()
@@ -583,7 +595,3 @@ func writeRaw(nc net.Conn, b []byte) {
 	nc.Write(append(b, '\n'))
 	nc.SetWriteDeadline(time.Time{})
 }
-
-var _ = engine.Fam4
-var _ = json.Marshal
-var _ = os.Getpid

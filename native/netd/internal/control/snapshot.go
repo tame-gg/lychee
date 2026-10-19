@@ -88,6 +88,7 @@ type snapshotView struct {
 	DiscoverySeq uint64        `json:"discovery_seq"`
 	Dropped      *uint64       `json:"dropped,omitempty"`
 	Skipped      []skipView    `json:"skipped,omitempty"`
+	Truncated    bool          `json:"truncated,omitempty"`
 }
 
 func mapLinkState(s string) string {

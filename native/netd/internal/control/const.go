@@ -25,3 +25,5 @@ const (
 )
 
 func msInt(d time.Duration) int64 { return int64(d / time.Millisecond) }
+
+func durMs(ms int64) time.Duration { return time.Duration(ms) * time.Millisecond }

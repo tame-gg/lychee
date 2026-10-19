@@ -9,8 +9,19 @@ import (
 
 var ErrUnknownAdapter = errors.New("unknown adapter")
 
+type AdapterInfo struct {
+	Name        string
+	Index       int
+	IP          string
+	IP6         string
+	Excluded    bool
+	WeightMode  string
+	Description string
+}
+
 type Engine interface {
 	Snapshot() []engine.SlotStats
+	Adapters() []AdapterInfo
 	Skipped() []nics.Skip
 	DiscoverySeq() uint64
 	Excluded(name string) bool
