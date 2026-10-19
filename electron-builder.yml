@@ -22,7 +22,18 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+# Third-party credits (see NOTICE), copied next to app.asar in every build's resources folder.
+extraResources:
+  - from: NOTICE
+    to: NOTICE
+  - from: build/licenses/net-merge-LICENSE.txt
+    to: licenses/net-merge-LICENSE.txt
 win:
+  # Wintun (wintun.dll) ships only in Windows builds, and its license must ship with it.
+  # electron-builder adds this to the top-level extraResources above.
+  extraResources:
+    - from: build/licenses/wintun-LICENSE.txt
+      to: licenses/wintun-LICENSE.txt
   # No protocols or fileAssociations: the NSIS installer would register Lychee as *the* handler for
   # magnet links and .torrent files, taking them from a torrent client the user already has.
   # A .torrent can still be opened with Lychee through "Open with".
