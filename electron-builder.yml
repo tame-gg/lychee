@@ -20,6 +20,10 @@ files:
   - '!node_modules/node-datachannel/**'
   - '!node_modules/webrtc-polyfill/**'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # The Playwright suite and its config are development-only (e2e/netd/ holds the fake network
+  # helper the tests talk to); nothing in the app loads them.
+  - '!e2e/**'
+  - '!{playwright.config.ts,tsconfig.e2e.json}'
 asarUnpack:
   - resources/**
 win:
