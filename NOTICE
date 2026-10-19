@@ -1,0 +1,17 @@
+Lychee
+
+Lychee bundles the third-party components below. Their full license texts are in
+build/licenses/ in the source tree and in the licenses/ folder of the installed app's
+resources.
+
+net-merge by Rohit Mahto (MIT): the network-merging helper, bundled as a separate program.
+https://github.com/rohit267/net-merge
+Copyright (c) 2026 Rohit Mahto
+License text: build/licenses/net-merge-LICENSE.txt
+
+Wintun by WireGuard LLC (Prebuilt Binaries License): the wintun.dll virtual network
+adapter driver that net-merge uses on Windows. Used unmodified, only through the API in
+wintun.h, and distributed alongside software that uses it that way.
+https://www.wintun.net/
+Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
+License text: build/licenses/wintun-LICENSE.txt (shipped in Windows builds)
