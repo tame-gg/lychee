@@ -191,3 +191,17 @@ func (f *fakeEngine) setSlots(slots ...engine.SlotStats) {
 	defer f.mu.Unlock()
 	f.slots = slots
 }
+
+func (f *fakeEngine) present(names ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, n := range names {
+		f.known[n] = true
+		f.slots = append(f.slots, engine.SlotStats{
+			Name: n, IP: "192.168.0.2", State: "up", State6: "-",
+			Present: true, Weight: 1, Weight6: 1,
+			LinkIn: 100000, LinkOut: 2000,
+		})
+		f.adapters = append(f.adapters, AdapterInfo{Name: n, Index: len(f.adapters) + 1, IP: "192.168.0.2", WeightMode: "auto"})
+	}
+}

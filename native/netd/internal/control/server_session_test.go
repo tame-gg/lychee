@@ -162,7 +162,7 @@ func TestGraceExitsHelper(t *testing.T) {
 }
 
 func TestGracePreservesState(t *testing.T) {
-	h := startHarness(t, func(c *Config, e *fakeEngine) { e.addKnown("Wi-Fi", "Ethernet") })
+	h := startHarness(t, func(c *Config, e *fakeEngine) { e.present("Wi-Fi", "Ethernet") })
 	c := h.dial()
 	inst1 := c.hello()["result"].(map[string]any)["instance"]
 	c.send(map[string]any{"id": 2, "cmd": "on"})
@@ -264,4 +264,15 @@ func responseByID(c *client, id int64) map[string]any {
 func responseResult(c *client, id int64) map[string]any {
 	r, _ := responseByID(c, id)["result"].(map[string]any)
 	return r
+}
+
+func TestSignalIsQuit(t *testing.T) {
+	h := startHarness(t, func(c *Config, e *fakeEngine) { e.present("Wi-Fi") })
+	c := h.dial()
+	c.hello()
+	h.srv.Shutdown()
+	h.waitExit()
+	if h.eng.offCalls == 0 {
+		t.Fatal("shutdown via signal should tear the engine down")
+	}
 }

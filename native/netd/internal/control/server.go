@@ -630,9 +630,7 @@ func (s *Server) doShutdown(code int) {
 	}
 	s.stopped = true
 	s.quitting = true
-	if s.eng.IsOn() {
-		s.eng.Off()
-	}
+	s.eng.Off()
 	if s.cfg.Listener != nil {
 		s.cfg.Listener.Close()
 	}
