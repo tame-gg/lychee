@@ -213,31 +213,38 @@ test.describe('framing and decoding (12.2)', () => {
     expect(await client.readJson()).toMatchObject({ id: 3, ok: true })
   })
 
-  test('the 17th unanswered request is too_many_requests, EOF', async ({ netd }) => {
+  test('17 pipelined requests: the first 16 are answered, the 17th is too_many_requests, EOF', async ({
+    netd
+  }) => {
     const { fake, client } = await netd.session()
-    const hold = fake.holdNext('status')
+    // Sent in one batch without reading: the helper reads ahead 16, answers them, then refuses.
     let batch = ''
-    for (let id = 1; id <= 17; id++) batch += JSON.stringify({ id, cmd: 'status' }) + '\n'
+    for (let id = 10; id <= 26; id++) batch += JSON.stringify({ id, cmd: 'status' }) + '\n'
     await client.send(batch)
+    const answered = (await client.readLines(16)).map((l) => JSON.parse(l))
+    expect(answered.map((r) => [r.id, r.ok])).toEqual(
+      [...Array(16).keys()].map((i) => [i + 10, true])
+    )
     expect(await client.readJson()).toEqual({
-      id: 17,
+      id: 26,
       ok: false,
       error: { code: 'too_many_requests', message: expect.any(String) }
     })
     await client.expectEof()
-    hold.release()
-    // 16 unanswered requests are fine.
+
+    // 16 unanswered at once is fine: held behind a slow first command, none answer until released.
     const client2 = await netd.connect()
     await netd.hello(client2)
-    const hold2 = fake.holdNext('status')
+    const hold = fake.holdNext('status')
     batch = ''
-    for (let id = 1; id <= 16; id++) batch += JSON.stringify({ id, cmd: 'status' }) + '\n'
+    for (let id = 30; id <= 45; id++) batch += JSON.stringify({ id, cmd: 'status' }) + '\n'
     await client2.send(batch)
     await fake.nextRequest('status')
     expect(await client2.quiet(100)).toBe(true)
-    hold2.release()
+    hold.release()
     const lines = await client2.readLines(16)
-    expect(lines.map((l) => JSON.parse(l).id)).toEqual([...Array(16).keys()].map((i) => i + 1))
+    expect(lines.map((l) => JSON.parse(l).id)).toEqual([...Array(16).keys()].map((i) => i + 30))
+    expect(await client2.quiet(50)).toBe(true)
   })
 
   test('responses come in request order even when the first command is slow', async ({ netd }) => {

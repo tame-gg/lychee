@@ -191,6 +191,8 @@ class Connection {
   helloTimer: FakeTimer | null = null
   stallTimer: FakeTimer | null = null
   needDrain = false
+  /** Set when a 17th unanswered request arrived: the queued 16 are answered, then this closes. */
+  tooManyPending: { id: number | null } | null = null
   constructor(
     readonly socket: Socket,
     readonly index: number
@@ -228,6 +230,20 @@ function parseFrame(text: string): { value: unknown; sources: NumberSources } {
     return v
   })
   return { value, sources }
+}
+
+/** The id of an overflow frame for the too_many_requests error, or null if it has none. */
+function bestEffortId(line: Buffer): number | null {
+  try {
+    const { value, sources } = parseFrame(decoder.decode(line))
+    if (isObject(value) && typeof value.id === 'number' && isIntegerLiteral(sources, value, 'id')) {
+      const id = value.id
+      if (id >= 1 && id <= MAX_ID) return id
+    }
+  } catch {
+    // Unparseable overflow frame: report the error with id null.
+  }
+  return null
 }
 
 function isIntegerLiteral(sources: NumberSources, holder: object, key: string): boolean {
@@ -672,6 +688,13 @@ export class FakeNetd extends EventEmitter {
         this.frameTooLarge(conn)
         break
       }
+      // Section 4.3 / 12.2: a 17th unanswered request stops the read; the 16 already queued are
+      // answered, then too_many_requests is the last frame before close (handled in processNext).
+      if (conn.tooManyPending) continue
+      if (conn.unanswered >= LIMITS.max_in_flight) {
+        conn.tooManyPending = { id: bestEffortId(line) }
+        break
+      }
       if (!this.acceptLine(conn, line)) break
     }
     if (!conn.closed) this.scheduleProcessing(conn)
@@ -720,14 +743,6 @@ export class FakeNetd extends EventEmitter {
     if (conn.queue.some((r) => r.id === id) || conn.executing?.id === id) {
       return fail(id, `id ${id} is still unanswered`)
     }
-    if (conn.unanswered >= LIMITS.max_in_flight) {
-      this.closeWithError(
-        conn,
-        id,
-        error('too_many_requests', `more than ${LIMITS.max_in_flight} unanswered requests`)
-      )
-      return false
-    }
     conn.queue.push({
       id,
       cmd: value.cmd,
@@ -754,6 +769,15 @@ export class FakeNetd extends EventEmitter {
       conn.executing = req
       this.emit('request', { cmd: req.cmd, id: req.id })
       this.execute(conn, req)
+    }
+    if (!conn.closed && !conn.executing && conn.queue.length === 0 && conn.tooManyPending) {
+      const { id } = conn.tooManyPending
+      conn.tooManyPending = null
+      this.closeWithError(
+        conn,
+        id,
+        error('too_many_requests', `more than ${LIMITS.max_in_flight} unanswered requests`)
+      )
     }
   }
 
@@ -794,6 +818,7 @@ export class FakeNetd extends EventEmitter {
         conn.socket.destroy()
         this.connectionGone(conn)
       }, WRITE_STALL_MS)
+      this.emit('writeStall')
     }
   }
 

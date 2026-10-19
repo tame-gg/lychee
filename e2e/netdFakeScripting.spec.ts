@@ -167,20 +167,22 @@ test.describe('scripted engine', () => {
   }) => {
     const { fake, client } = await netd.session()
     await client.request({ id: 2, cmd: 'subscribe', args: { interval_ms: 250 } })
-    await client.readLines(2)
-    fake.setDelay('status', 1000)
+    await client.readLines(2) // response + immediate stats (seq 2, ts 1759999999500)
+    fake.setDelay('status', 900)
     await client.request({ id: 3, cmd: 'status' })
     await fake.nextRequest('status')
-    netd.clock.advance(1000)
+    // Three ticks fall due at 750/000/250 while the command runs; they coalesce into one stats
+    // event, delivered right after the response when the command completes at ts ...400.
+    netd.clock.advance(900)
     const frames = (await client.readLines(2)).map((l) => JSON.parse(l))
-    expect(frames[0]).toMatchObject({ id: 3, ok: true })
-    // Four ticks fell due; one coalesced stats event follows, then the ticker continues.
-    expect(frames[1]).toMatchObject({ event: 'stats', seq: 3, data: { ts: 1760000000500 } })
-    netd.clock.advance(250)
+    expect(frames[0]).toMatchObject({ id: 3, ok: true, result: { ts: 1760000000400 } })
+    expect(frames[1]).toMatchObject({ event: 'stats', seq: 3, data: { ts: 1760000000400 } })
+    // The ticker then resumes on its own schedule.
+    netd.clock.advance(100)
     expect(await client.readJson()).toMatchObject({
       event: 'stats',
       seq: 4,
-      data: { ts: 1760000000750 }
+      data: { ts: 1760000000500 }
     })
   })
 
@@ -202,7 +204,7 @@ test.describe('scripted engine', () => {
     netd
   }) => {
     const { fake, client } = await netd.session()
-    // Fill the socket buffers with status responses the client never drains.
+    // Big status responses so a few fill the socket write buffer the client stops draining.
     const adapters = Array.from({ length: 64 }, (_, i) => ({
       name: `eth${i}`.padEnd(200, 'x'),
       index: i + 1,
@@ -212,18 +214,18 @@ test.describe('scripted engine', () => {
       state6: 'none' as const
     }))
     for (const a of adapters) fake.addAdapter(a)
-    const grace = netd.once(fake, 'grace', 10000)
-    for (let round = 0; round < 40 && !fake.view.graceRunning; round++) {
-      let batch = ''
-      for (let i = 0; i < 16; i++)
-        batch += JSON.stringify({ id: round * 16 + i + 2, cmd: 'status' }) + '\n'
-      await client.send(batch).catch(() => {})
-      await new Promise((r) => setTimeout(r, 5))
-      netd.clock.advance(1000)
-    }
+    client.pauseReading()
+    const stall = netd.once(fake, 'writeStall')
+    let batch = ''
+    for (let id = 2; id <= 17; id++) batch += JSON.stringify({ id, cmd: 'status' }) + '\n'
+    await client.send(batch)
+    await stall // the writer backed up: the 30 s stall timer is armed
+    const grace = netd.once(fake, 'grace')
+    netd.clock.advance(29999)
+    expect(fake.view.graceRunning).toBe(false)
+    netd.clock.advance(1)
     await grace
     expect(fake.view.session).toBeNull()
-    void client
   })
 
   test('log events are scriptable', async ({ netd }) => {

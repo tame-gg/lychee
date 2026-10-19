@@ -1,6 +1,20 @@
 import { connect, type Socket } from 'node:net'
 import { StringDecoder } from 'node:string_decoder'
 
+/** Write/socket errors that just mean "the helper closed on us", not a test failure. */
+const BENIGN_CLOSE = new Set([
+  'EPIPE',
+  'ECONNRESET',
+  'ERR_STREAM_DESTROYED',
+  'ERR_STREAM_WRITE_AFTER_END',
+  'EBADF'
+])
+
+function isBenignClose(err: unknown): boolean {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code
+  return code !== undefined && BENIGN_CLOSE.has(code)
+}
+
 /**
  * A deliberately dumb client for driving the fake helper from tests: raw bytes out, raw lines in.
  * It is NOT the real netd client (src/main/network/merge/netdClient.ts, plan item L-3) and does
@@ -41,7 +55,8 @@ export class TestClient {
       this.wake?.()
     })
     socket.on('error', (err) => {
-      this.error = err
+      // A rejected peer makes the write fail with EPIPE/ECONNRESET; that is a clean close here.
+      if (!isBenignClose(err)) this.error = err
       this.eof = true
       this.wake?.()
     })
@@ -70,12 +85,21 @@ export class TestClient {
     return this.eof
   }
 
-  /** Writes raw bytes, exactly as given (no newline is added). */
+  /**
+   * Writes raw bytes, exactly as given (no newline is added). A write to a socket the helper
+   * already closed (a rejected peer) resolves quietly: the point of such a test is that the bytes
+   * go nowhere, which the following expectEof() verifies.
+   */
   send(raw: string | Buffer): Promise<void> {
     return new Promise((resolve, reject) => {
-      if (this.socket.destroyed) return reject(new Error('socket already closed'))
-      this.socket.write(raw, (err) => (err ? reject(err) : resolve()))
+      if (this.socket.destroyed) return resolve()
+      this.socket.write(raw, (err) => (err && !isBenignClose(err) ? reject(err) : resolve()))
     })
+  }
+
+  /** Stops draining the socket, so the helper's writes back up (for the write-stall test). */
+  pauseReading(): void {
+    this.socket.pause()
   }
 
   /** Sends one JSON frame: the object plus `\n`. */
@@ -133,11 +157,9 @@ export class TestClient {
           return true
         }
         if (this.eof) {
-          if (this.error && (this.error as NodeJS.ErrnoException).code !== 'ECONNRESET') {
-            reject(this.error)
-          } else {
-            resolve()
-          }
+          // Benign close errors are filtered out before they reach this.error.
+          if (this.error) reject(this.error)
+          else resolve()
           return true
         }
         return false

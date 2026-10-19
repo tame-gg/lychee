@@ -930,23 +930,19 @@ test.describe('stats stream (12.5)', () => {
   test('seq increases by exactly 1 across stats, state and log events', async ({ netd }) => {
     const { fake, client } = await netd.session()
     await client.request({ id: 2, cmd: 'subscribe' })
-    await client.readJson()
-    fake.log('warn', 'IPv6 not captured: operation not permitted')
-    await client.request({ id: 3, cmd: 'set_ipv6', args: { mode: 'on' } })
-    await client.readJson()
-    netd.clock.advance(1000)
-    const frames = (await client.readLines(4)).map((l) => JSON.parse(l))
-    expect(frames.map((f) => [f.event, f.seq])).toEqual([
-      ['stats', 2],
-      ['log', 3],
-      ['state', 4],
-      ['stats', 5]
-    ])
-    expect(frames[1]).toEqual({
+    expect(await client.readJson()).toMatchObject({ id: 2, ok: true }) // subscribe response
+    expect(await client.readJson()).toMatchObject({ event: 'stats', seq: 2 }) // immediate stats
+    fake.log('warn', 'IPv6 not captured: operation not permitted') // log, seq 3
+    expect(await client.readJson()).toEqual({
       event: 'log',
       seq: 3,
       data: { level: 'warn', message: 'IPv6 not captured: operation not permitted' }
     })
+    await client.request({ id: 3, cmd: 'set_ipv6', args: { mode: 'on' } }) // effective changes
+    expect(await client.readJson()).toMatchObject({ event: 'state', seq: 4 }) // state, seq 4
+    expect(await client.readJson()).toMatchObject({ id: 3, ok: true }) // set_ipv6 response
+    netd.clock.advance(1000)
+    expect(await client.readJson()).toMatchObject({ event: 'stats', seq: 5 }) // next tick
   })
 
   test('dropped events consume seq and are reported in the next stats event', async ({ netd }) => {

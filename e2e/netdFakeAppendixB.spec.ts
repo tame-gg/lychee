@@ -123,7 +123,10 @@ test('Appendix B main session replays byte for byte', async ({ netd }) => {
     {
       fragments: [
         '{"event":"state","seq":4,"data":{"ts":1760000001350,"state":"on","state_since":1760000001350,',
-        '"autopause":{"enabled":true,"status":"held"},"tun":{"name":"utun5","open":true}}}'
+        // The appendix prints autopause directly followed by tun; section 8.3's field order puts
+        // ipv6 between them, which the fake follows (see notes/fakenetd-ambiguities.md).
+        '"autopause":{"enabled":true,"status":"held"}',
+        '"tun":{"name":"utun5","open":true}}}'
       ]
     },
     replay
