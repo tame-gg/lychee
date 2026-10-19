@@ -5,15 +5,15 @@ network helper (started as `lychee-netd serve --control <path>`), and an unprivi
 Lychee Electron app's main process). The helper's engine was ported from net-merge (v0.3.1, `227c4dd`)
 into this repository under `native/netd/`; `docs/netmerge-plan.md` is the plan this implements.
 
-| | |
-|---|---|
-| Protocol version | 1 |
-| Document revision | 2026-10-19 (draft for review; sections 2, 3 and 11 are the security review's scope) |
-| Implements | plan items L-1 (helper) and L-3 (client) of `docs/netmerge-plan.md` in this repository (sections 3, 4, 6, 9, 13 and "Security requirements (from review)") |
+|                               |                                                                                                                                                                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Protocol version              | 1                                                                                                                                                                                                                                                                                                 |
+| Document revision             | 2026-10-19, rev. 2: clarifications from the fake netd (#12) in 2.7, 4.1, 4.3, 6.2, 7.11, 7.14, 8.1, 8.2, 10.1 and Appendix B (draft for review; sections 2, 3 and 11 are the security review's scope)                                                                                             |
+| Implements                    | plan items L-1 (helper) and L-3 (client) of `docs/netmerge-plan.md` in this repository (sections 3, 4, 6, 9, 13 and "Security requirements (from review)")                                                                                                                                        |
 | Code this was written against | `native/netd/cmd/lychee-netd/main.go`, `native/netd/internal/{engine,nics,tun,platform,logx}` and `native/netd/internal/control/autopause.go`, as ported from net-merge commit `227c4dd` (0.3.1). Paths below are relative to `native/netd/` unless they start with `native/`, `src/` or `docs/`. |
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as in RFC 2119. Text marked
-*informative* explains intent and does not bind implementations.
+_informative_ explains intent and does not bind implementations.
 
 Contents
 
@@ -29,6 +29,7 @@ Contents
 10. [Lifecycle and state machines](#10-lifecycle-and-state-machines)
 11. [Security checklist](#11-security-checklist)
 12. [Test plan](#12-test-plan)
+
 - [Appendix A: SlotStats field mapping](#appendix-a-slotstats-field-mapping)
 - [Appendix B: example session](#appendix-b-example-session)
 - [Appendix C: TypeScript sketch](#appendix-c-typescript-sketch)
@@ -88,38 +89,38 @@ which prints the build's version and exits, is the only other subcommand.
 
 ### 1.4 Terminology
 
-| Term | Meaning |
-|---|---|
-| helper | The process started as `lychee-netd serve --control <path>` (`lychee-netd.exe` on Windows). Runs with root (macOS, Linux via `pkexec`/`sudo`), `CAP_NET_ADMIN` (Linux via `setcap`), or an elevated token (Windows). Owns the TUN, the scheduler and the single-instance lock. |
-| client | The unprivileged process that connects to the control path: Lychee's Electron main process. Only the user who launched the helper is authorized. |
-| connection | One accepted transport connection that passed the peer-credential check (section 3). |
-| session | A connection on which the `hello` handshake succeeded. At most one session exists at a time. |
-| authorized principal | The uid (Linux, macOS) or user SID (Windows) allowed to open a session. Determined at helper start (section 3). |
-| merging / capture | The TUN adapter and its `/1` routes are installed, so new flows of every app are balanced (`tun.On`). |
-| grace period | The time the helper keeps running after its session drops without a `quit`, waiting for the client to reconnect (section 10.3). |
-| request / response / event | The three message kinds (section 6). Requests flow client to helper; responses and events flow helper to client. |
+| Term                       | Meaning                                                                                                                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| helper                     | The process started as `lychee-netd serve --control <path>` (`lychee-netd.exe` on Windows). Runs with root (macOS, Linux via `pkexec`/`sudo`), `CAP_NET_ADMIN` (Linux via `setcap`), or an elevated token (Windows). Owns the TUN, the scheduler and the single-instance lock. |
+| client                     | The unprivileged process that connects to the control path: Lychee's Electron main process. Only the user who launched the helper is authorized.                                                                                                                               |
+| connection                 | One accepted transport connection that passed the peer-credential check (section 3).                                                                                                                                                                                           |
+| session                    | A connection on which the `hello` handshake succeeded. At most one session exists at a time.                                                                                                                                                                                   |
+| authorized principal       | The uid (Linux, macOS) or user SID (Windows) allowed to open a session. Determined at helper start (section 3).                                                                                                                                                                |
+| merging / capture          | The TUN adapter and its `/1` routes are installed, so new flows of every app are balanced (`tun.On`).                                                                                                                                                                          |
+| grace period               | The time the helper keeps running after its session drops without a `quit`, waiting for the client to reconnect (section 10.3).                                                                                                                                                |
+| request / response / event | The three message kinds (section 6). Requests flow client to helper; responses and events flow helper to client.                                                                                                                                                               |
 
 ### 1.5 Protocol constants
 
 All constants are normative and are also reported in the `hello` response so a client never hard-codes
 them.
 
-| Constant | Value |
-|---|---|
-| Protocol version | `1` |
-| Maximum frame size (either direction, including the terminating newline) | 65536 bytes (64 KiB) |
-| Maximum unanswered requests per session | 16 |
-| `hello` timeout after connect | 5000 ms |
-| Connections awaiting `hello` at the same time | 4 |
-| Startup timeout (listening without any authorized connection) | 30000 ms |
-| Reconnect grace period | 10000 ms |
-| Stats interval (`subscribe`) | 250 to 5000 ms, default 1000 ms |
-| Outbound queue per session | 64 frames |
-| Write stall limit (client not reading) | 30000 ms |
-| Manual weight range | 0.05 to 100 inclusive |
-| Deadline for `on`, `off`, `cleanup` inside the helper | 30 s |
-| Maximum adapters in one `stats` event or `status` response | 64 present plus 64 skipped |
-| Maximum length of any string in a request | 256 bytes |
+| Constant                                                                 | Value                           |
+| ------------------------------------------------------------------------ | ------------------------------- |
+| Protocol version                                                         | `1`                             |
+| Maximum frame size (either direction, including the terminating newline) | 65536 bytes (64 KiB)            |
+| Maximum unanswered requests per session                                  | 16                              |
+| `hello` timeout after connect                                            | 5000 ms                         |
+| Connections awaiting `hello` at the same time                            | 4                               |
+| Startup timeout (listening without any authorized connection)            | 30000 ms                        |
+| Reconnect grace period                                                   | 10000 ms                        |
+| Stats interval (`subscribe`)                                             | 250 to 5000 ms, default 1000 ms |
+| Outbound queue per session                                               | 64 frames                       |
+| Write stall limit (client not reading)                                   | 30000 ms                        |
+| Manual weight range                                                      | 0.05 to 100 inclusive           |
+| Deadline for `on`, `off`, `cleanup` inside the helper                    | 30 s                            |
+| Maximum adapters in one `stats` event or `status` response               | 64 present plus 64 skipped      |
+| Maximum length of any string in a request                                | 256 bytes                       |
 
 ### 1.6 Relationship to the ported code (informative)
 
@@ -159,10 +160,10 @@ them.
 
 Two privilege models exist, and the client chooses the path according to how it launched the helper.
 
-| Launched as | Privilege | Control path | Directory | Socket file |
-|---|---|---|---|---|
-| the user, binary has `cap_net_admin,cap_net_raw+ep` (deb, rpm, `setcap`) | capabilities | `$XDG_RUNTIME_DIR/lychee/netd.sock` | `$XDG_RUNTIME_DIR/lychee`, mode `0700`, owned by the user | mode `0600`, owned by the user |
-| root via `pkexec` or `sudo` (AppImage, no capabilities) | root | `/run/lychee-netd/netd.sock` | `/run/lychee-netd`, mode `0755`, owned by `root:root` | mode `0600`, owned by the authorized uid |
+| Launched as                                                              | Privilege    | Control path                        | Directory                                                 | Socket file                              |
+| ------------------------------------------------------------------------ | ------------ | ----------------------------------- | --------------------------------------------------------- | ---------------------------------------- |
+| the user, binary has `cap_net_admin,cap_net_raw+ep` (deb, rpm, `setcap`) | capabilities | `$XDG_RUNTIME_DIR/lychee/netd.sock` | `$XDG_RUNTIME_DIR/lychee`, mode `0700`, owned by the user | mode `0600`, owned by the user           |
+| root via `pkexec` or `sudo` (AppImage, no capabilities)                  | root         | `/run/lychee-netd/netd.sock`        | `/run/lychee-netd`, mode `0755`, owned by `root:root`     | mode `0600`, owned by the authorized uid |
 
 Rules when the helper runs as root (effective uid 0):
 
@@ -190,12 +191,12 @@ Rules when the helper runs as the user with capabilities:
 The helper always runs as root, started through the sudoers rule that `Lychee`'s one-time setup
 installs (section 3.3).
 
-| Item | Value |
-|---|---|
-| Helper binary | `/Library/PrivilegedHelperTools/gg.tame.lychee.netd`, owned by `root:wheel`, mode `0755` |
-| Exact argument vector | `serve --control /var/run/lychee-netd/netd.sock` |
-| Directory | `/var/run/lychee-netd`, mode `0755`, owned by `root:wheel` |
-| Socket file | mode `0600`, owned by the authorized uid (`SUDO_UID`) |
+| Item                  | Value                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| Helper binary         | `/Library/PrivilegedHelperTools/gg.tame.lychee.netd`, owned by `root:wheel`, mode `0755` |
+| Exact argument vector | `serve --control /var/run/lychee-netd/netd.sock`                                         |
+| Directory             | `/var/run/lychee-netd`, mode `0755`, owned by `root:wheel`                               |
+| Socket file           | mode `0600`, owned by the authorized uid (`SUDO_UID`)                                    |
 
 Rules:
 
@@ -210,17 +211,17 @@ Rules:
 
 ### 2.4 Windows
 
-| Item | Value |
-|---|---|
+| Item      | Value                                                                                                   |
+| --------- | ------------------------------------------------------------------------------------------------------- |
 | Pipe name | `\\.\pipe\lychee-netd-<SID>` where `<SID>` is the authorized user's SID in string form (`S-1-5-21-...`) |
-| Example | `\\.\pipe\lychee-netd-S-1-5-21-1004336348-1177238915-682003330-1001` |
+| Example   | `\\.\pipe\lychee-netd-S-1-5-21-1004336348-1177238915-682003330-1001`                                    |
 
 Rules:
 
 1. The authorized SID is the user SID of the helper's own process token (`TokenUser`). This equals the
-   SID of the user running Lychee only when that user is an administrator: a UAC *consent* prompt
+   SID of the user running Lychee only when that user is an administrator: a UAC _consent_ prompt
    elevates the same account, and a scheduled task registered by that account runs as it. On a standard
-   (non-administrator) account the UAC *credential* prompt elevates as whichever administrator typed
+   (non-administrator) account the UAC _credential_ prompt elevates as whichever administrator typed
    their password, so the helper's token user, pipe name and DACL belong to that administrator and
    Lychee, running as the standard user, cannot connect (`CreateFile` on the pipe fails with
    `ERROR_ACCESS_DENIED`; were it to get through, rule 6 would fail). This fails safe: no other user can
@@ -270,7 +271,7 @@ could have planted something.
 4. Set the process umask to `0077`, `bind()` the socket (the file is created `0600`), then restore the
    umask. Then `chmod` the path to `0600` explicitly (umask is a belt; this is the braces).
 5. When running as root, `chown` the socket file to the authorized uid, group unchanged (`chown(uid,
-   -1)`). With mode `0600` the group is irrelevant.
+-1)`). With mode `0600` the group is irrelevant.
 6. `listen()`. Nobody can connect before this call; between `bind()` and `listen()` a `connect()` gets
    `ECONNREFUSED`.
 7. Start the accept loop and the startup timer (section 10.2).
@@ -279,12 +280,12 @@ could have planted something.
 
 Before `bind()` the helper `lstat`s the control path.
 
-| `lstat` result | Action |
-|---|---|
-| does not exist | continue |
+| `lstat` result                                                                                          | Action                                                                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| does not exist                                                                                          | continue                                                                                                                                                                   |
 | a socket (`S_IFSOCK`) owned by the expected owner (root when the helper is root, else the helper's uid) | `connect()` to it. `ECONNREFUSED`: nobody listens, it is stale: `unlink` and continue. Success or any other error: another helper is live or the state is unclear: exit 4. |
-| a socket owned by anyone else | refuse, exit 3 |
-| anything else (regular file, directory, symlink, device) | refuse, exit 3 |
+| a socket owned by anyone else                                                                           | refuse, exit 3                                                                                                                                                             |
+| anything else (regular file, directory, symlink, device)                                                | refuse, exit 3                                                                                                                                                             |
 
 The helper never follows a symlink at the control path and never unlinks anything but a socket it could
 have created itself. A pre-existing path is never reused.
@@ -298,14 +299,17 @@ same inode it created.
 
 ### 2.7 Exit codes
 
-| Code | Meaning |
-|---|---|
-| 0 | normal exit: `quit`, SIGTERM/SIGINT/SIGHUP, grace period expired, or startup timeout with no client |
-| 2 | usage error (wrong arguments) |
-| 3 | refused: missing privilege (Unix; on Windows a non-elevated token is 6), failed self-check, no authorized principal, invalid control path |
-| 4 | another `lychee-netd`, or a standalone net-merge, holds a single-instance lock or a live socket |
-| 5 | the transport could not be created (bind/listen failed, pipe name taken) |
-| 6 | `needs_admin` (Windows): the process token is not elevated or not a member of Administrators (section 2.4 rule 7) |
+Exit codes are process outcomes observed by whoever launched the helper (the client's launcher), not
+frames on the channel; a client sees them through its launch API, never through a response.
+
+| Code | Meaning                                                                                                                                   |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | normal exit: `quit`, SIGTERM/SIGINT/SIGHUP, grace period expired, or startup timeout with no client                                       |
+| 2    | usage error (wrong arguments)                                                                                                             |
+| 3    | refused: missing privilege (Unix; on Windows a non-elevated token is 6), failed self-check, no authorized principal, invalid control path |
+| 4    | another `lychee-netd`, or a standalone net-merge, holds a single-instance lock or a live socket                                           |
+| 5    | the transport could not be created (bind/listen failed, pipe name taken)                                                                  |
+| 6    | `needs_admin` (Windows): the process token is not elevated or not a member of Administrators (section 2.4 rule 7)                         |
 
 The client maps 3 to "needs permission / not installed", 4 to "another connection-merging tool is
 running", 5 to "helper unavailable, retry" and 6 to "Combining connections system-wide needs an
@@ -350,11 +354,11 @@ under the sudoers rule of section 3.3, so step 2 always applies and `SUDO_UID` i
 
 Immediately after `accept()`, before the first `read()`:
 
-| | Linux | macOS |
-|---|---|---|
-| Call | `getsockopt(SOL_SOCKET, SO_PEERCRED)` giving `uid`, `gid`, `pid` | `getsockopt(SOL_LOCAL, LOCAL_PEERCRED)` giving `xucred.cr_uid` (equivalently `getpeereid`), plus `getsockopt(SOL_LOCAL, LOCAL_PEERPID)` for the pid |
-| Accept when | `uid == authorized uid` or `uid == 0`, and `pid != 0` | `cr_uid == authorized uid` or `cr_uid == 0` |
-| Otherwise | close immediately, log `peer rejected uid=<uid> pid=<pid>` | same |
+|             | Linux                                                            | macOS                                                                                                                                               |
+| ----------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Call        | `getsockopt(SOL_SOCKET, SO_PEERCRED)` giving `uid`, `gid`, `pid` | `getsockopt(SOL_LOCAL, LOCAL_PEERCRED)` giving `xucred.cr_uid` (equivalently `getpeereid`), plus `getsockopt(SOL_LOCAL, LOCAL_PEERPID)` for the pid |
+| Accept when | `uid == authorized uid` or `uid == 0`, and `pid != 0`            | `cr_uid == authorized uid` or `cr_uid == 0`                                                                                                         |
+| Otherwise   | close immediately, log `peer rejected uid=<uid> pid=<pid>`       | same                                                                                                                                                |
 
 `pid == 0` on Linux means the peer lives in a pid namespace the helper cannot see; such peers are
 rejected. The pid is for logging and for the `busy` error's `session_pid`; it is not an authorization
@@ -431,38 +435,38 @@ creation.
 
 ### 3.5 Control path validation summary
 
-| Check | Root helper (Linux, macOS) | User helper (Linux) |
-|---|---|---|
-| Path is exactly the fixed production path | MUST | not required (tests use a temp dir) |
-| Directory exists, is a directory by `lstat` (no symlink) | MUST | MUST |
-| Directory owner | uid 0 | helper's uid |
-| Directory mode | no group/world write (`0755`) | no group/world bits at all (`0700`) |
-| Parent chain root-owned, no group/world write | MUST (`rootOnly`) | not required |
-| `$XDG_RUNTIME_DIR` owned by uid, mode `0700` | n/a | MUST (production path) |
-| Pre-existing path handling | section 2.6 | section 2.6 |
-| Socket mode after creation | `0600`, owned by authorized uid | `0600`, owned by the user |
+| Check                                                    | Root helper (Linux, macOS)      | User helper (Linux)                 |
+| -------------------------------------------------------- | ------------------------------- | ----------------------------------- |
+| Path is exactly the fixed production path                | MUST                            | not required (tests use a temp dir) |
+| Directory exists, is a directory by `lstat` (no symlink) | MUST                            | MUST                                |
+| Directory owner                                          | uid 0                           | helper's uid                        |
+| Directory mode                                           | no group/world write (`0755`)   | no group/world bits at all (`0700`) |
+| Parent chain root-owned, no group/world write            | MUST (`rootOnly`)               | not required                        |
+| `$XDG_RUNTIME_DIR` owned by uid, mode `0700`             | n/a                             | MUST (production path)              |
+| Pre-existing path handling                               | section 2.6                     | section 2.6                         |
+| Socket mode after creation                               | `0600`, owned by authorized uid | `0600`, owned by the user           |
 
 ### 3.6 Threat model
 
 What the channel defends against, what it does not, and why.
 
-| Actor or situation | Outcome | Mechanism |
-|---|---|---|
-| Another local user, or malware running as another user, tries to connect | Cannot connect: Unix socket mode `0600` in a directory they cannot write; Windows DACL without their SID. If they get a connection anyway, the peer check rejects it before any byte is read. | Sections 2 and 3.3/3.4 |
-| Another local user tries to pre-create the control path ("squatting") | Unix root case: impossible, the directory is root-owned `0755`. Unix user case: impossible, `$XDG_RUNTIME_DIR` is `0700`. Windows: the name is global; a squatter makes the helper fail with exit 5 instead of joining the pipe (`FILE_FLAG_FIRST_PIPE_INSTANCE`), and the client refuses to talk to a server whose process SID is not its own (section 2.4 rule 6). Denial of service by a co-located user is possible on Windows and is accepted. | 2.4, 2.6 |
-| Symlink planted at the control path or in its directory | Never followed: `lstat` everywhere, a symlink is a refusal, `unlink` only of a socket owned by the expected owner in a directory only that owner can write. Root helpers only operate on a fixed path in a root-owned chain, so no user-controlled component exists. | 2.2, 2.3, 2.6 |
-| A process running as the authorized user (including malware as that user) | **Trusted.** It can turn merging on and off, exclude adapters, change weights and quit the helper. It can also create further instances of the Windows pipe (the user ACE must include `GENERIC_WRITE`, which carries `FILE_CREATE_PIPE_INSTANCE`) and race the client. The channel does not protect the user from their own account. What it guarantees even then: no operation exists that takes a path, a program name or free-form text that reaches a shell, `exec`, or the filesystem, so a same-user compromise gains no privilege through the helper. | 7, 11 |
-| Root / SYSTEM / an elevated administrator | Trusted; they can do everything the helper can without it. Root peers are accepted on Unix. | 3.3 |
-| The helper binary or a parent directory is replaced by the user (macOS sudoers; Windows scheduled task; Linux deb/rpm) | The sudoers rule only names a root-owned path; install-time `copyRootOwned` and the runtime self-check refuse a non-root-owned binary or a user-writable parent. Windows: the elevated copy step places the helper in `%ProgramFiles%\Lychee\helper`, verifies its ACL (only SYSTEM and Administrators may write) and the helper's signature or SHA-256, and the task points only there. Linux deb/rpm: root-owned `/usr/lib/lychee/lychee-netd` with `setcap`. | plan section 4 |
-| Linux AppImage via `pkexec` | The binary runs from a user-writable location. Accepted because `pkexec` asks for the administrator password on every start, so a swapped binary gains nothing the user does not type the password for. The self-check of 3.3 cannot be satisfied there and is skipped when the resolved executable is not root-owned *and* `PKEXEC_UID` is set; it still logs a warning. | plan section 4 |
-| The one-time privileged install step itself (macOS admin prompt copying from the app bundle, Windows elevated copy) | Trusts the helper binary inside the bundle at that moment. A same-user attacker who already modified the bundle before the user approves the prompt gets root/admin at that step. Inherent to any admin-prompted install from a user-writable location; mitigated by the hash/signature verification in the copy step and fixed properly by code signing plus `SMAppService`. Flagged for S2. | plan section 4 |
-| A standard Windows account whose UAC credential prompt elevated the helper as another administrator | The helper belongs to that administrator: its pipe name and DACL carry the administrator's SID, the standard user's Lychee cannot open it, and merging stays off. Fails safe; the client detects it and asks for an administrator account (sections 2.4, 10.6). A `RunLevel HighestAvailable` task started by a standard user yields a limited token: the helper exits 6 at start. | 2.4, 2.7, 10.6 |
-| A standalone net-merge installed on the same machine | Both tools would install the same `/1` routes. The helper probes net-merge's lock names and exits 4 while one is held; its own adapter name and Wintun GUID differ from net-merge's, so the adapters never collide. | 10.7 |
-| Malformed, oversized or flooding input from the authorized user | Bounded: 64 KiB frames, 16 unanswered requests, 4 pending connections, 5 s `hello` timeout, 30 s write stall limit, strict decoding. Errors close the connection where the decoder cannot recover. | 4, 9 |
-| Information disclosure | Stats expose adapter names, addresses and traffic rates to the authorized user only. The helper never reveals environment, file contents or other users' data. | 8 |
-| Environment manipulation | `sudo` and `pkexec` sanitize the environment. The helper reads only `PKEXEC_UID`, `SUDO_UID` and (user case) `XDG_RUNTIME_DIR`. System tools are run by absolute path (`/sbin/route`, `/sbin/ifconfig`, `/usr/sbin/networksetup`; on Windows `%SystemRoot%\System32\netsh.exe`, `route.exe`, `WindowsPowerShell\v1.0\powershell.exe`) with arguments built only from constants and discovery results, never from client input. | 11 |
-| Crash of the helper | The TUN is a file descriptor: adapter and routes vanish with the process on all three platforms. Residue: macOS scoped default routes and the Windows weak-host restore file, cleaned at the next start and by `cleanup`. The socket file stays and is handled as stale next time. | 10.5 |
-| Out of scope | Kernel or driver vulnerabilities (TUN, Wintun), physical access, other software that also installs `/1` routes (Tailscale exit nodes), and anything a root or SYSTEM attacker can do. |
+| Actor or situation                                                                                                     | Outcome                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Mechanism              |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| Another local user, or malware running as another user, tries to connect                                               | Cannot connect: Unix socket mode `0600` in a directory they cannot write; Windows DACL without their SID. If they get a connection anyway, the peer check rejects it before any byte is read.                                                                                                                                                                                                                                                                                                                                                                 | Sections 2 and 3.3/3.4 |
+| Another local user tries to pre-create the control path ("squatting")                                                  | Unix root case: impossible, the directory is root-owned `0755`. Unix user case: impossible, `$XDG_RUNTIME_DIR` is `0700`. Windows: the name is global; a squatter makes the helper fail with exit 5 instead of joining the pipe (`FILE_FLAG_FIRST_PIPE_INSTANCE`), and the client refuses to talk to a server whose process SID is not its own (section 2.4 rule 6). Denial of service by a co-located user is possible on Windows and is accepted.                                                                                                           | 2.4, 2.6               |
+| Symlink planted at the control path or in its directory                                                                | Never followed: `lstat` everywhere, a symlink is a refusal, `unlink` only of a socket owned by the expected owner in a directory only that owner can write. Root helpers only operate on a fixed path in a root-owned chain, so no user-controlled component exists.                                                                                                                                                                                                                                                                                          | 2.2, 2.3, 2.6          |
+| A process running as the authorized user (including malware as that user)                                              | **Trusted.** It can turn merging on and off, exclude adapters, change weights and quit the helper. It can also create further instances of the Windows pipe (the user ACE must include `GENERIC_WRITE`, which carries `FILE_CREATE_PIPE_INSTANCE`) and race the client. The channel does not protect the user from their own account. What it guarantees even then: no operation exists that takes a path, a program name or free-form text that reaches a shell, `exec`, or the filesystem, so a same-user compromise gains no privilege through the helper. | 7, 11                  |
+| Root / SYSTEM / an elevated administrator                                                                              | Trusted; they can do everything the helper can without it. Root peers are accepted on Unix.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | 3.3                    |
+| The helper binary or a parent directory is replaced by the user (macOS sudoers; Windows scheduled task; Linux deb/rpm) | The sudoers rule only names a root-owned path; install-time `copyRootOwned` and the runtime self-check refuse a non-root-owned binary or a user-writable parent. Windows: the elevated copy step places the helper in `%ProgramFiles%\Lychee\helper`, verifies its ACL (only SYSTEM and Administrators may write) and the helper's signature or SHA-256, and the task points only there. Linux deb/rpm: root-owned `/usr/lib/lychee/lychee-netd` with `setcap`.                                                                                               | plan section 4         |
+| Linux AppImage via `pkexec`                                                                                            | The binary runs from a user-writable location. Accepted because `pkexec` asks for the administrator password on every start, so a swapped binary gains nothing the user does not type the password for. The self-check of 3.3 cannot be satisfied there and is skipped when the resolved executable is not root-owned _and_ `PKEXEC_UID` is set; it still logs a warning.                                                                                                                                                                                     | plan section 4         |
+| The one-time privileged install step itself (macOS admin prompt copying from the app bundle, Windows elevated copy)    | Trusts the helper binary inside the bundle at that moment. A same-user attacker who already modified the bundle before the user approves the prompt gets root/admin at that step. Inherent to any admin-prompted install from a user-writable location; mitigated by the hash/signature verification in the copy step and fixed properly by code signing plus `SMAppService`. Flagged for S2.                                                                                                                                                                 | plan section 4         |
+| A standard Windows account whose UAC credential prompt elevated the helper as another administrator                    | The helper belongs to that administrator: its pipe name and DACL carry the administrator's SID, the standard user's Lychee cannot open it, and merging stays off. Fails safe; the client detects it and asks for an administrator account (sections 2.4, 10.6). A `RunLevel HighestAvailable` task started by a standard user yields a limited token: the helper exits 6 at start.                                                                                                                                                                            | 2.4, 2.7, 10.6         |
+| A standalone net-merge installed on the same machine                                                                   | Both tools would install the same `/1` routes. The helper probes net-merge's lock names and exits 4 while one is held; its own adapter name and Wintun GUID differ from net-merge's, so the adapters never collide.                                                                                                                                                                                                                                                                                                                                           | 10.7                   |
+| Malformed, oversized or flooding input from the authorized user                                                        | Bounded: 64 KiB frames, 16 unanswered requests, 4 pending connections, 5 s `hello` timeout, 30 s write stall limit, strict decoding. Errors close the connection where the decoder cannot recover.                                                                                                                                                                                                                                                                                                                                                            | 4, 9                   |
+| Information disclosure                                                                                                 | Stats expose adapter names, addresses and traffic rates to the authorized user only. The helper never reveals environment, file contents or other users' data.                                                                                                                                                                                                                                                                                                                                                                                                | 8                      |
+| Environment manipulation                                                                                               | `sudo` and `pkexec` sanitize the environment. The helper reads only `PKEXEC_UID`, `SUDO_UID` and (user case) `XDG_RUNTIME_DIR`. System tools are run by absolute path (`/sbin/route`, `/sbin/ifconfig`, `/usr/sbin/networksetup`; on Windows `%SystemRoot%\System32\netsh.exe`, `route.exe`, `WindowsPowerShell\v1.0\powershell.exe`) with arguments built only from constants and discovery results, never from client input.                                                                                                                                | 11                     |
+| Crash of the helper                                                                                                    | The TUN is a file descriptor: adapter and routes vanish with the process on all three platforms. Residue: macOS scoped default routes and the Windows weak-host restore file, cleaned at the next start and by `cleanup`. The socket file stays and is handled as stale next time.                                                                                                                                                                                                                                                                            | 10.5                   |
+| Out of scope                                                                                                           | Kernel or driver vulnerabilities (TUN, Wintun), physical access, other software that also installs `/1` routes (Tailscale exit nodes), and anything a root or SYSTEM attacker can do.                                                                                                                                                                                                                                                                                                                                                                         |
 
 ---
 
@@ -481,22 +485,26 @@ What the channel defends against, what it does not, and why.
   them are at most 256 bytes.
 - Requests MUST NOT contain duplicate object keys. The helper MAY reject them; it is not required to
   detect them (Go's decoder keeps the last value).
+- Key order is not significant. Both sides MAY emit object keys in any order, and clients MUST NOT
+  depend on the order of keys in any frame. The examples in this document use one fixed order for
+  readability only; a test that compares frames as strings (such as the fake helper's Appendix B
+  replay) relies on the fake's own order, not on the real helper's.
 - Numbers: integers are JSON numbers without fraction or exponent and fit in `[-(2^53-1), 2^53-1]` so
   JavaScript clients can use `number`. Rates and counters are integers; weights are JSON numbers with
   an optional fraction.
 
 ### 4.2 Decoding errors
 
-| Condition | Helper behaviour |
-|---|---|
-| A line longer than 65536 bytes (detected before the newline arrives) | send `{"id":null,"ok":false,"error":{"code":"frame_too_large",...}}`, close |
-| Invalid UTF-8 or a NUL byte | `bad_request`, close |
-| Not valid JSON, or valid JSON that is not an object | `bad_request`, close |
-| An object without a valid `id` or `cmd` (section 6.1) | `bad_request` with `"id": null` (or the id if it was valid), close |
-| A valid envelope with an unknown command | `unknown_command`, connection stays open |
-| A valid envelope with an unknown field anywhere in the request, including inside `args` | `unknown_field`, stays open |
-| A valid envelope whose `args` have a missing required field, a wrong type, or an invalid enum string | `bad_request`, stays open |
-| A valid envelope whose number is outside its documented range | `out_of_range`, stays open |
+| Condition                                                                                            | Helper behaviour                                                            |
+| ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| A line longer than 65536 bytes (detected before the newline arrives)                                 | send `{"id":null,"ok":false,"error":{"code":"frame_too_large",...}}`, close |
+| Invalid UTF-8 or a NUL byte                                                                          | `bad_request`, close                                                        |
+| Not valid JSON, or valid JSON that is not an object                                                  | `bad_request`, close                                                        |
+| An object without a valid `id` or `cmd` (section 6.1)                                                | `bad_request` with `"id": null` (or the id if it was valid), close          |
+| A valid envelope with an unknown command                                                             | `unknown_command`, connection stays open                                    |
+| A valid envelope with an unknown field anywhere in the request, including inside `args`              | `unknown_field`, stays open                                                 |
+| A valid envelope whose `args` have a missing required field, a wrong type, or an invalid enum string | `bad_request`, stays open                                                   |
+| A valid envelope whose number is outside its documented range                                        | `out_of_range`, stays open                                                  |
 
 On a connection that has not completed `hello`, every error closes the connection, whatever the table
 says (section 5.2): there is no session to keep.
@@ -513,8 +521,10 @@ is a bug; the client SHOULD log it, close and reconnect.
 - Requests are processed strictly in the order received, one at a time, including long-running ones
   (`on`, `off`, `cleanup`). Responses are therefore sent in request order.
 - A client MAY send further requests before receiving responses. At most 16 requests may be unanswered
-  at any time. The helper reads ahead into a queue of that size; when a 17th unanswered request arrives
-  the helper sends `too_many_requests` and closes.
+  at any time. The helper reads ahead into a queue of that size. When a 17th request arrives while 16
+  are still unanswered, the helper first answers the 16 queued requests in order, then sends
+  `too_many_requests` (with `id` of the 17th request) and closes the connection; the 17th request is
+  never executed (section 12.2 `TestInFlightLimit`).
 - Events (section 8) are not subject to this limit and may be interleaved between responses at any
   frame boundary.
 
@@ -538,7 +548,7 @@ The protocol version is an integer. This document defines version `1`. Within a 
 are additive only:
 
 - The helper MAY add fields to responses and events, add event types, add enum values to fields that
-  this document marks as *open* (`state`, `autopause.status`, `capabilities`, `log.level`), and add new
+  this document marks as _open_ (`state`, `autopause.status`, `capabilities`, `log.level`), and add new
   commands.
 - Clients MUST ignore response and event fields they do not know, MUST ignore unknown event types, and
   MUST render unknown open-enum values neutrally instead of failing.
@@ -562,66 +572,82 @@ session continues.
 Request:
 
 ```json
-{"id":1,"cmd":"hello","args":{"protocol":[1],"client":"lychee","client_version":"0.2.0"}}
+{
+  "id": 1,
+  "cmd": "hello",
+  "args": { "protocol": [1], "client": "lychee", "client_version": "0.2.0" }
+}
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `protocol` | array of integers | yes | the versions the client supports, 1 to 8 entries, each `1..1000`, no duplicates |
-| `client` | string | yes | `^[A-Za-z0-9._-]{1,32}$` |
-| `client_version` | string | yes | `^[A-Za-z0-9._+-]{1,32}$` |
+| Field            | Type              | Required | Rules                                                                           |
+| ---------------- | ----------------- | -------- | ------------------------------------------------------------------------------- |
+| `protocol`       | array of integers | yes      | the versions the client supports, 1 to 8 entries, each `1..1000`, no duplicates |
+| `client`         | string            | yes      | `^[A-Za-z0-9._-]{1,32}$`                                                        |
+| `client_version` | string            | yes      | `^[A-Za-z0-9._+-]{1,32}$`                                                       |
 
 Response:
 
 ```json
-{"id":1,"ok":true,"result":{
-  "protocol":1,
-  "helper_version":"0.2.0",
-  "os":"linux","arch":"amd64","pid":48213,
-  "instance":"3f9c2a7e5b1d4c6a8e0f1a2b3c4d5e6f",
-  "session":1,
-  "auth":{"model":"unix_peer_uid","privilege":"capabilities","authorized_uid":1000},
-  "capabilities":["link_counters"],
-  "limits":{"max_frame":65536,"max_in_flight":16,"hello_timeout_ms":5000,"grace_ms":10000,
-            "startup_timeout_ms":30000,"stats_interval_ms":{"min":250,"max":5000,"default":1000},
-            "weight":{"min":0.05,"max":100}},
-  "capture":{"available":true,"error":null}
-}}
+{
+  "id": 1,
+  "ok": true,
+  "result": {
+    "protocol": 1,
+    "helper_version": "0.2.0",
+    "os": "linux",
+    "arch": "amd64",
+    "pid": 48213,
+    "instance": "3f9c2a7e5b1d4c6a8e0f1a2b3c4d5e6f",
+    "session": 1,
+    "auth": { "model": "unix_peer_uid", "privilege": "capabilities", "authorized_uid": 1000 },
+    "capabilities": ["link_counters"],
+    "limits": {
+      "max_frame": 65536,
+      "max_in_flight": 16,
+      "hello_timeout_ms": 5000,
+      "grace_ms": 10000,
+      "startup_timeout_ms": 30000,
+      "stats_interval_ms": { "min": 250, "max": 5000, "default": 1000 },
+      "weight": { "min": 0.05, "max": 100 }
+    },
+    "capture": { "available": true, "error": null }
+  }
+}
 ```
 
-| Field | Type | Meaning |
-|---|---|---|
-| `protocol` | integer | the version chosen: the highest in the client's list that the helper supports |
-| `helper_version` | string | `main.version` as built: Lychee's `package.json` version, which the client MUST require to equal its own version (`"dev"` for unversioned builds); a mismatch is "Network helper is out of date" (plan section 4) |
-| `os`, `arch` | string | Go's `GOOS` and `GOARCH` (`linux`, `darwin`, `windows`; `amd64`, `arm64`, ...) |
-| `pid` | integer | the helper's pid |
-| `instance` | string | 32 lowercase hex characters, random per helper process. A reconnecting client compares it with the previous value: equal means the same helper and all state is preserved; different means a new helper that must be configured again. |
-| `session` | integer | 1 for the first session of this helper process, incremented for each later one |
-| `auth.model` | string (open) | `unix_peer_uid` or `windows_pipe_sid` |
-| `auth.privilege` | string (open) | `root`, `capabilities` or `elevated` |
-| `auth.authorized_uid` | integer | present on Linux and macOS |
-| `auth.authorized_sid` | string | present on Windows |
-| `capabilities` | array of strings (open) | optional features of this helper, section 5.3 |
-| `limits` | object | the constants of section 1.5; clients MUST use these values rather than their own |
-| `capture.available` | boolean | `false` when `platform.CheckDriver` failed at start (no `/dev/net/tun`, no `wintun.dll`); `on` will fail with `unsupported_platform` but stats still work |
-| `capture.error` | string or null | the driver check's message when `available` is false |
+| Field                 | Type                    | Meaning                                                                                                                                                                                                                                |
+| --------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `protocol`            | integer                 | the version chosen: the highest in the client's list that the helper supports                                                                                                                                                          |
+| `helper_version`      | string                  | `main.version` as built: Lychee's `package.json` version, which the client MUST require to equal its own version (`"dev"` for unversioned builds); a mismatch is "Network helper is out of date" (plan section 4)                      |
+| `os`, `arch`          | string                  | Go's `GOOS` and `GOARCH` (`linux`, `darwin`, `windows`; `amd64`, `arm64`, ...)                                                                                                                                                         |
+| `pid`                 | integer                 | the helper's pid                                                                                                                                                                                                                       |
+| `instance`            | string                  | 32 lowercase hex characters, random per helper process. A reconnecting client compares it with the previous value: equal means the same helper and all state is preserved; different means a new helper that must be configured again. |
+| `session`             | integer                 | 1 for the first session of this helper process, incremented for each later one                                                                                                                                                         |
+| `auth.model`          | string (open)           | `unix_peer_uid` or `windows_pipe_sid`                                                                                                                                                                                                  |
+| `auth.privilege`      | string (open)           | `root`, `capabilities` or `elevated`                                                                                                                                                                                                   |
+| `auth.authorized_uid` | integer                 | present on Linux and macOS                                                                                                                                                                                                             |
+| `auth.authorized_sid` | string                  | present on Windows                                                                                                                                                                                                                     |
+| `capabilities`        | array of strings (open) | optional features of this helper, section 5.3                                                                                                                                                                                          |
+| `limits`              | object                  | the constants of section 1.5; clients MUST use these values rather than their own                                                                                                                                                      |
+| `capture.available`   | boolean                 | `false` when `platform.CheckDriver` failed at start (no `/dev/net/tun`, no `wintun.dll`); `on` will fail with `unsupported_platform` but stats still work                                                                              |
+| `capture.error`       | string or null          | the driver check's message when `available` is false                                                                                                                                                                                   |
 
 Errors:
 
-| Code | When | Connection |
-|---|---|---|
-| `version_unsupported` | no entry of `protocol` is supported; `error.data.supported` lists the helper's versions | closed |
-| `busy` | a session already exists; `error.data.session_pid` is that client's pid | closed |
-| `bad_request`, `unknown_field` | malformed args | closed (the connection has no session to keep) |
+| Code                           | When                                                                                                                                                                                                      | Connection                                     |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `version_unsupported`          | no entry of `protocol` is supported; `error.data.supported` lists the helper's versions                                                                                                                   | closed                                         |
+| `busy`                         | a session already exists; `error.data.session_pid` is that client's pid as seen by the peer check (informative, for logs and messages; clients MUST NOT rely on it, and test fakes may use a fixed value) | closed                                         |
+| `bad_request`, `unknown_field` | malformed args                                                                                                                                                                                            | closed (the connection has no session to keep) |
 
 ### 5.3 Capabilities
 
 All commands of section 7 are mandatory in version 1 and are not capability-gated. `capabilities`
 announces optional behaviour:
 
-| Capability | Meaning |
-|---|---|
-| `link_counters` | the helper can read the OS byte counters (`nics.Octets`) on this system, so `link_in_bps`/`link_out_bps` are meaningful |
+| Capability            | Meaning                                                                                                                   |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `link_counters`       | the helper can read the OS byte counters (`nics.Octets`) on this system, so `link_in_bps`/`link_out_bps` are meaningful   |
 | `keep_adapter_on_off` | `off` keeps the TUN adapter and only removes routes (macOS `keepDevice`), so pausing does not disturb other virtual links |
 
 Unknown capability strings MUST be ignored by clients.
@@ -633,14 +659,14 @@ Unknown capability strings MUST be ignored by clients.
 ### 6.1 Requests (client to helper)
 
 ```json
-{"id":7,"cmd":"set_ipv6","args":{"mode":"on"}}
+{ "id": 7, "cmd": "set_ipv6", "args": { "mode": "on" } }
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `id` | integer | yes | `1..2^53-1`. MUST be unique among the client's unanswered requests; reusing an id that is still unanswered is `bad_request` (connection closed). Ids of answered requests may be reused. |
-| `cmd` | string | yes | one of the command names in section 7, exactly, lowercase |
-| `args` | object | no | command arguments; absent means `{}`. MUST be an object if present. |
+| Field  | Type    | Required | Rules                                                                                                                                                                                    |
+| ------ | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`   | integer | yes      | `1..2^53-1`. MUST be unique among the client's unanswered requests; reusing an id that is still unanswered is `bad_request` (connection closed). Ids of answered requests may be reused. |
+| `cmd`  | string  | yes      | one of the command names in section 7, exactly, lowercase                                                                                                                                |
+| `args` | object  | no       | command arguments; absent means `{}`. MUST be an object if present.                                                                                                                      |
 
 No other top-level field is allowed (`unknown_field`).
 
@@ -649,37 +675,45 @@ No other top-level field is allowed (`unknown_field`).
 Success:
 
 ```json
-{"id":7,"ok":true,"result":{"mode":"on","effective":"balanced"}}
+{ "id": 7, "ok": true, "result": { "mode": "on", "effective": "balanced" } }
 ```
 
 Failure:
 
 ```json
-{"id":7,"ok":false,"error":{"code":"out_of_range","message":"interval_ms must be between 250 and 5000","data":{"field":"interval_ms","min":250,"max":5000}}}
+{
+  "id": 7,
+  "ok": false,
+  "error": {
+    "code": "out_of_range",
+    "message": "interval_ms must be between 250 and 5000",
+    "data": { "field": "interval_ms", "min": 250, "max": 5000 }
+  }
+}
 ```
 
-| Field | Type | Rules |
-|---|---|---|
-| `id` | integer or null | the request's id; `null` only when the request could not be decoded far enough to know it |
-| `ok` | boolean | |
-| `result` | object | present if and only if `ok` is true; `{}` when a command has nothing to return |
-| `error.code` | string | one of section 9; the only field clients branch on |
-| `error.message` | string | human-readable English, at most 512 bytes, for logs and error dialogs; never parsed |
-| `error.data` | object | optional, code-specific extras listed in section 9 |
+| Field           | Type            | Rules                                                                                     |
+| --------------- | --------------- | ----------------------------------------------------------------------------------------- |
+| `id`            | integer or null | the request's id; `null` only when the request could not be decoded far enough to know it |
+| `ok`            | boolean         |                                                                                           |
+| `result`        | object          | present if and only if `ok` is true; `{}` when a command has nothing to return            |
+| `error.code`    | string          | one of section 9; the only field clients branch on                                        |
+| `error.message` | string          | human-readable English, at most 512 bytes, for logs and error dialogs; never parsed       |
+| `error.data`    | object          | optional, code-specific extras listed in section 9                                        |
 
 Exactly one response is sent per request, including requests that close the connection.
 
 ### 6.3 Events (helper to client)
 
 ```json
-{"event":"state","seq":12,"data":{"state":"on", "...":"..."}}
+{ "event": "state", "seq": 12, "data": { "state": "on", "...": "..." } }
 ```
 
-| Field | Type | Rules |
-|---|---|---|
-| `event` | string (open) | `stats`, `state` or `log` in version 1 |
-| `seq` | integer | starts at 1 for each session, increases by 1 per event generated (section 4.4) |
-| `data` | object | event payload, section 8 |
+| Field   | Type          | Rules                                                                          |
+| ------- | ------------- | ------------------------------------------------------------------------------ |
+| `event` | string (open) | `stats`, `state` or `log` in version 1                                         |
+| `seq`   | integer       | starts at 1 for each session, increases by 1 per event generated (section 4.4) |
+| `data`  | object        | event payload, section 8                                                       |
 
 Events have no `id`. They are only sent on a session (after `hello`).
 
@@ -691,22 +725,22 @@ Events have no `id`. They are only sent on a session (after `hello`).
 
 The complete set of commands in protocol version 1:
 
-| Command | Purpose | Changes state | Section |
-|---|---|---|---|
-| `hello` | handshake, first on every connection | session | 5.2 |
-| `status` | one snapshot of everything the stats stream carries, plus skipped adapters | no | 7.2 |
-| `subscribe` | start or re-time the `stats` event stream | subscription | 7.3 |
-| `unsubscribe` | stop the stream | subscription | 7.4 |
-| `on` | start merging (manual start, as the tray's "Start merging") | merging | 7.5 |
-| `off` | stop merging (manual stop; autopause never resumes after it) | merging | 7.6 |
-| `set_ipv6` | `auto`, `on` or `off`, as `-ipv6` and the tray checkbox | option | 7.7 |
-| `set_autopause` | enable or disable pausing by itself | option | 7.8 |
-| `exclude` | stop giving flows to an adapter | adapter set | 7.9 |
-| `include` | undo `exclude` | adapter set | 7.10 |
-| `set_weight` | pin an adapter's weight or return it to automatic | weights | 7.11 |
-| `list_adapters` | usable and skipped adapters with reasons | no | 7.12 |
-| `cleanup` | remove stale routes left by a crash; only while off | system | 7.13 |
-| `quit` | turn off and exit | process | 7.14 |
+| Command         | Purpose                                                                    | Changes state | Section |
+| --------------- | -------------------------------------------------------------------------- | ------------- | ------- |
+| `hello`         | handshake, first on every connection                                       | session       | 5.2     |
+| `status`        | one snapshot of everything the stats stream carries, plus skipped adapters | no            | 7.2     |
+| `subscribe`     | start or re-time the `stats` event stream                                  | subscription  | 7.3     |
+| `unsubscribe`   | stop the stream                                                            | subscription  | 7.4     |
+| `on`            | start merging (manual start, as the tray's "Start merging")                | merging       | 7.5     |
+| `off`           | stop merging (manual stop; autopause never resumes after it)               | merging       | 7.6     |
+| `set_ipv6`      | `auto`, `on` or `off`, as `-ipv6` and the tray checkbox                    | option        | 7.7     |
+| `set_autopause` | enable or disable pausing by itself                                        | option        | 7.8     |
+| `exclude`       | stop giving flows to an adapter                                            | adapter set   | 7.9     |
+| `include`       | undo `exclude`                                                             | adapter set   | 7.10    |
+| `set_weight`    | pin an adapter's weight or return it to automatic                          | weights       | 7.11    |
+| `list_adapters` | usable and skipped adapters with reasons                                   | no            | 7.12    |
+| `cleanup`       | remove stale routes left by a crash; only while off                        | system        | 7.13    |
+| `quit`          | turn off and exit                                                          | process       | 7.14    |
 
 Rules that apply to every command:
 
@@ -731,21 +765,46 @@ Returns the current `Snapshot` plus the skipped adapters. Does not require a sub
 the client's liveness probe.
 
 ```json
-{"id":2,"cmd":"status"}
+{ "id": 2, "cmd": "status" }
 ```
 
 ```json
-{"id":2,"ok":true,"result":{
-  "ts":1760000000123,"state":"off","state_since":1759999990000,"error":null,
-  "capture":{"available":true,"error":null},
-  "autopause":{"enabled":true,"status":"manual_off"},
-  "ipv6":{"mode":"auto","effective":"refused","detail":"auto: refused, apps fall back to IPv4 so every adapter is used (not every adapter has IPv6)"},
-  "tun":{"name":null,"open":false},
-  "totals":{"link_in_bps":1312000,"link_out_bps":91000,"relayed_in_bps":0,"relayed_out_bps":0,"active_flows":0,"adapters_present":2,"adapters_usable":2},
-  "adapters":[ "... section 8.2 ..." ],
-  "discovery_seq":3,
-  "skipped":[{"name":"tailscale0","reason":"looks like a virtual/VPN adapter (name)"},{"name":"docker0","reason":"tunnel/virtual interface (software interface type 1, no hardware device)"}]
-}}
+{
+  "id": 2,
+  "ok": true,
+  "result": {
+    "ts": 1760000000123,
+    "state": "off",
+    "state_since": 1759999990000,
+    "error": null,
+    "capture": { "available": true, "error": null },
+    "autopause": { "enabled": true, "status": "manual_off" },
+    "ipv6": {
+      "mode": "auto",
+      "effective": "refused",
+      "detail": "auto: refused, apps fall back to IPv4 so every adapter is used (not every adapter has IPv6)"
+    },
+    "tun": { "name": null, "open": false },
+    "totals": {
+      "link_in_bps": 1312000,
+      "link_out_bps": 91000,
+      "relayed_in_bps": 0,
+      "relayed_out_bps": 0,
+      "active_flows": 0,
+      "adapters_present": 2,
+      "adapters_usable": 2
+    },
+    "adapters": ["... section 8.2 ..."],
+    "discovery_seq": 3,
+    "skipped": [
+      { "name": "tailscale0", "reason": "looks like a virtual/VPN adapter (name)" },
+      {
+        "name": "docker0",
+        "reason": "tunnel/virtual interface (software interface type 1, no hardware device)"
+      }
+    ]
+  }
+}
 ```
 
 Args: none (`args` absent or `{}`). Errors: none specific. Idempotent.
@@ -756,21 +815,21 @@ Starts the `stats` event stream, or changes its interval if already subscribed. 
 event is sent immediately after the response; subsequent ones every `interval_ms`.
 
 ```json
-{"id":3,"cmd":"subscribe","args":{"interval_ms":1000}}
+{ "id": 3, "cmd": "subscribe", "args": { "interval_ms": 1000 } }
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `interval_ms` | integer | no | `250..5000`; default `1000` |
+| Field         | Type    | Required | Rules                       |
+| ------------- | ------- | -------- | --------------------------- |
+| `interval_ms` | integer | no       | `250..5000`; default `1000` |
 
 ```json
-{"id":3,"ok":true,"result":{"interval_ms":1000}}
+{ "id": 3, "ok": true, "result": { "interval_ms": 1000 } }
 ```
 
 Errors: `out_of_range` (`data.field = "interval_ms"`). Idempotent. The subscription belongs to the
 session: a reconnect starts without one.
 
-*Informative:* the engine samples throughput once a second (`Scheduler.Tick`), so intervals below
+_Informative:_ the engine samples throughput once a second (`Scheduler.Tick`), so intervals below
 1000 ms repeat the same rate values; they only make `state` and flow counts visible sooner.
 
 ### 7.4 `unsubscribe`
@@ -779,10 +838,11 @@ Stops the stream. Succeeds even when not subscribed. A `stats` event already que
 after the response.
 
 ```json
-{"id":4,"cmd":"unsubscribe"}
+{ "id": 4, "cmd": "unsubscribe" }
 ```
+
 ```json
-{"id":4,"ok":true,"result":{}}
+{ "id": 4, "ok": true, "result": {} }
 ```
 
 ### 7.5 `on`
@@ -792,22 +852,23 @@ intent for autopause (`autoPauser.userSet(true, usable)`), then installs the TUN
 (`tun.On`). On macOS the first `on` creates the utun; later `off`/`on` pairs keep it (`keepDevice`).
 
 ```json
-{"id":5,"cmd":"on"}
+{ "id": 5, "cmd": "on" }
 ```
+
 ```json
-{"id":5,"ok":true,"result":{"state":"on"}}
+{ "id": 5, "ok": true, "result": { "state": "on" } }
 ```
 
 Preconditions and outcomes:
 
-| Situation | Result |
-|---|---|
-| `capture.available` is false | error `unsupported_platform`, state unchanged |
-| no adapter is present and not excluded | error `no_adapters`, state unchanged (capturing with nothing to send to would cut the machine off) |
-| state is `on` | success, no-op (idempotent) |
-| state is `starting` | cannot happen: requests are sequential |
-| state is `off`, `paused_auto` or `error` | state becomes `starting` (a `state` event), then `on` (a `state` event) and the response is sent |
-| `tun.On` fails | state becomes `error` with the message (a `state` event); error `internal` with the same message, for example `route 0.0.0.0/1: file exists` when another program holds the same routes |
+| Situation                                | Result                                                                                                                                                                                  |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `capture.available` is false             | error `unsupported_platform`, state unchanged                                                                                                                                           |
+| no adapter is present and not excluded   | error `no_adapters`, state unchanged (capturing with nothing to send to would cut the machine off)                                                                                      |
+| state is `on`                            | success, no-op (idempotent)                                                                                                                                                             |
+| state is `starting`                      | cannot happen: requests are sequential                                                                                                                                                  |
+| state is `off`, `paused_auto` or `error` | state becomes `starting` (a `state` event), then `on` (a `state` event) and the response is sent                                                                                        |
+| `tun.On` fails                           | state becomes `error` with the message (a `state` event); error `internal` with the same message, for example `route 0.0.0.0/1: file exists` when another program holds the same routes |
 
 Autopause interaction: after `on` with fewer than two usable adapters the helper is in the tray's
 "held" condition and will not pause by itself until two usable adapters have been seen at the same time.
@@ -822,10 +883,11 @@ Manual stop. Equivalent to the tray's "Pause merging" (`manual(false)`): removes
 resume it. Always succeeds; idempotent.
 
 ```json
-{"id":6,"cmd":"off"}
+{ "id": 6, "cmd": "off" }
 ```
+
 ```json
-{"id":6,"ok":true,"result":{"state":"off"}}
+{ "id": 6, "ok": true, "result": { "state": "off" } }
 ```
 
 A `state` event with `off` precedes the response. From `error` the result is `off` and the error is
@@ -838,15 +900,15 @@ Sets the IPv6 policy (`Balancer.SetV6Mode`). Takes effect for new flows immediat
 are not touched.
 
 ```json
-{"id":7,"cmd":"set_ipv6","args":{"mode":"auto"}}
+{ "id": 7, "cmd": "set_ipv6", "args": { "mode": "auto" } }
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `mode` | string | yes | `auto`, `on` or `off` (`engine.ParseV6Mode`) |
+| Field  | Type   | Required | Rules                                        |
+| ------ | ------ | -------- | -------------------------------------------- |
+| `mode` | string | yes      | `auto`, `on` or `off` (`engine.ParseV6Mode`) |
 
 ```json
-{"id":7,"ok":true,"result":{"mode":"auto","effective":"refused"}}
+{ "id": 7, "ok": true, "result": { "mode": "auto", "effective": "refused" } }
 ```
 
 `effective` is `balanced` when `Balancer.V6Allowed()` is true at that moment, else `refused`
@@ -858,15 +920,15 @@ Enables or disables pausing by itself (the tray's "Pause when there is only one 
 `autoPauser.setEnabled`).
 
 ```json
-{"id":8,"cmd":"set_autopause","args":{"enabled":false}}
+{ "id": 8, "cmd": "set_autopause", "args": { "enabled": false } }
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `enabled` | boolean | yes | JSON `true`/`false` only |
+| Field     | Type    | Required | Rules                    |
+| --------- | ------- | -------- | ------------------------ |
+| `enabled` | boolean | yes      | JSON `true`/`false` only |
 
 ```json
-{"id":8,"ok":true,"result":{"enabled":false,"status":"disabled"}}
+{ "id": 8, "ok": true, "result": { "enabled": false, "status": "disabled" } }
 ```
 
 Effects, mirroring `setEnabled(enabled, on)`:
@@ -889,15 +951,15 @@ Stops giving flows to an adapter. The adapter is removed from the scheduler at t
 and its OS counters continue to be reported.
 
 ```json
-{"id":9,"cmd":"exclude","args":{"adapter":"Wi-Fi"}}
+{ "id": 9, "cmd": "exclude", "args": { "adapter": "Wi-Fi" } }
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `adapter` | string | yes | 1 to 256 bytes, valid UTF-8, no control characters. MUST equal (byte for byte) a name in the current discovery result, usable or skipped, or a name already in the exclusion set. |
+| Field     | Type   | Required | Rules                                                                                                                                                                             |
+| --------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adapter` | string | yes      | 1 to 256 bytes, valid UTF-8, no control characters. MUST equal (byte for byte) a name in the current discovery result, usable or skipped, or a name already in the exclusion set. |
 
 ```json
-{"id":9,"ok":true,"result":{"adapter":"Wi-Fi","excluded":true}}
+{ "id": 9, "ok": true, "result": { "adapter": "Wi-Fi", "excluded": true } }
 ```
 
 Errors: `unknown_adapter` (`data.adapter`). Excluding a skipped adapter succeeds and has no effect
@@ -916,7 +978,7 @@ Removes a name from the exclusion set. The adapter rejoins at the next rescan if
 returns it as usable.
 
 ```json
-{"id":10,"cmd":"include","args":{"adapter":"Wi-Fi"}}
+{ "id": 10, "cmd": "include", "args": { "adapter": "Wi-Fi" } }
 ```
 
 Same `adapter` rules as `exclude`. Result `{"adapter":"Wi-Fi","excluded":false}`. Errors:
@@ -932,13 +994,13 @@ the adapter (the engine tracks `weight[Fam4]` and `weight[Fam6]`; a manual weigh
 {"id":12,"cmd":"set_weight","args":{"adapter":"Ethernet","weight":"auto"}}
 ```
 
-| Field | Type | Required | Rules |
-|---|---|---|---|
-| `adapter` | string | yes | as in `exclude`; MUST be in the current discovery result (usable) or in the override table |
-| `weight` | number or the string `"auto"` | yes | a finite number in `0.05..100` inclusive, or exactly `"auto"` |
+| Field     | Type                          | Required | Rules                                                                                      |
+| --------- | ----------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `adapter` | string                        | yes      | as in `exclude`; MUST be in the current discovery result (usable) or in the override table |
+| `weight`  | number or the string `"auto"` | yes      | a finite number in `0.05..100` inclusive, or exactly `"auto"`                              |
 
 ```json
-{"id":11,"ok":true,"result":{"adapter":"Ethernet","weight_mode":"manual","weight":3}}
+{ "id": 11, "ok": true, "result": { "adapter": "Ethernet", "weight_mode": "manual", "weight": 3 } }
 ```
 
 Semantics:
@@ -951,9 +1013,13 @@ Semantics:
   adapter being unplugged and replugged. `"auto"` removes the entry.
 - Setting `"auto"` on an adapter that is already automatic succeeds (idempotent); so does setting the
   same manual weight twice.
-- *Implementation note:* today `Scheduler.SetAuto` is all-or-nothing. The helper needs a per-slot
+- _Implementation note:_ today `Scheduler.SetAuto` is all-or-nothing. The helper needs a per-slot
   manual flag that `Tick`'s auto loop skips, and `Update` must apply the override table instead of
   `nics.Nic.Weight`.
+
+With `"auto"` the result is `{"adapter":..,"weight_mode":"auto","weight":<current automatic weight>}`,
+where `weight` is the adapter's current automatic IPv4 weight (`Weight`), which may change at the next
+tick.
 
 Errors: `unknown_adapter`, `out_of_range` (`data.field = "weight"`, `data.min = 0.05`, `data.max =
 100`), `bad_request` (not a number and not `"auto"`; `NaN`/`Infinity` are not valid JSON anyway).
@@ -964,32 +1030,53 @@ The result of the latest discovery run: adapters the engine may use, and adapter
 with the reason strings from `nics.DiscoverNicsDetailed` (`nics.Skip`).
 
 ```json
-{"id":13,"cmd":"list_adapters"}
-```
-```json
-{"id":13,"ok":true,"result":{
-  "discovery_seq":3,
-  "adapters":[
-    {"name":"Wi-Fi","index":12,"ip":"192.168.1.23","ip6":"2001:db8:1::23","excluded":false,"weight_mode":"auto","description":"Intel(R) Wi-Fi 6 AX201"},
-    {"name":"Ethernet 3","index":7,"ip":"10.42.0.5","ip6":null,"excluded":true,"weight_mode":"manual","description":null}
-  ],
-  "skipped":[
-    {"name":"tailscale0","reason":"looks like a virtual/VPN adapter (name)"},
-    {"name":"enp5s0","reason":"no default gateway (no internet route)"}
-  ]
-}}
+{ "id": 13, "cmd": "list_adapters" }
 ```
 
-| Field | Type | Meaning |
-|---|---|---|
-| `adapters[].name` | string | `nics.Nic.Name`, the key used by every other command |
-| `adapters[].index` | integer | `nics.Nic.Index` |
-| `adapters[].ip`, `.ip6` | string or null | `nics.Nic.IP` / `.IP6` |
-| `adapters[].excluded` | boolean | in the exclusion set |
-| `adapters[].weight_mode` | string | `auto` or `manual` |
-| `adapters[].description` | string or null | the OS's description of the hardware when known (driver name on Linux, System Settings name on macOS, adapter description on Windows); null if the helper does not have it |
-| `skipped[].name`, `.reason` | string | `nics.Skip` |
-| `discovery_seq` | integer | increments whenever the set of names or reasons changes; also present in `Snapshot` so clients know when to call this |
+```json
+{
+  "id": 13,
+  "ok": true,
+  "result": {
+    "discovery_seq": 3,
+    "adapters": [
+      {
+        "name": "Wi-Fi",
+        "index": 12,
+        "ip": "192.168.1.23",
+        "ip6": "2001:db8:1::23",
+        "excluded": false,
+        "weight_mode": "auto",
+        "description": "Intel(R) Wi-Fi 6 AX201"
+      },
+      {
+        "name": "Ethernet 3",
+        "index": 7,
+        "ip": "10.42.0.5",
+        "ip6": null,
+        "excluded": true,
+        "weight_mode": "manual",
+        "description": null
+      }
+    ],
+    "skipped": [
+      { "name": "tailscale0", "reason": "looks like a virtual/VPN adapter (name)" },
+      { "name": "enp5s0", "reason": "no default gateway (no internet route)" }
+    ]
+  }
+}
+```
+
+| Field                       | Type           | Meaning                                                                                                                                                                    |
+| --------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `adapters[].name`           | string         | `nics.Nic.Name`, the key used by every other command                                                                                                                       |
+| `adapters[].index`          | integer        | `nics.Nic.Index`                                                                                                                                                           |
+| `adapters[].ip`, `.ip6`     | string or null | `nics.Nic.IP` / `.IP6`                                                                                                                                                     |
+| `adapters[].excluded`       | boolean        | in the exclusion set                                                                                                                                                       |
+| `adapters[].weight_mode`    | string         | `auto` or `manual`                                                                                                                                                         |
+| `adapters[].description`    | string or null | the OS's description of the hardware when known (driver name on Linux, System Settings name on macOS, adapter description on Windows); null if the helper does not have it |
+| `skipped[].name`, `.reason` | string         | `nics.Skip`                                                                                                                                                                |
+| `discovery_seq`             | integer        | increments whenever the set of names or reasons changes; also present in `Snapshot` so clients know when to call this                                                      |
 
 Args: none. Errors: none specific. Both lists are capped at 64 entries (the first 64 by discovery
 order); `truncated: true` is added at the top level when a cap was hit.
@@ -1002,10 +1089,11 @@ crashed run turned off (`restoreStrongHost`). net-merge exposed this as `net-mer
 has no command line for it, the channel is the only way.
 
 ```json
-{"id":14,"cmd":"cleanup"}
+{ "id": 14, "cmd": "cleanup" }
 ```
+
 ```json
-{"id":14,"ok":true,"result":{}}
+{ "id": 14, "ok": true, "result": {} }
 ```
 
 Preconditions: state MUST be `off` or `error`; otherwise `invalid_state` (`data.state`). Not allowed
@@ -1017,14 +1105,17 @@ Idempotent. Errors: `invalid_state`, `internal`.
 Turns merging off, tears everything down and exits the process with code 0.
 
 ```json
-{"id":15,"cmd":"quit"}
-```
-```json
-{"id":15,"ok":true,"result":{}}
+{ "id": 15, "cmd": "quit" }
 ```
 
-The response is sent first, then the helper runs the shutdown sequence of section 10.4 and closes the
-connection. The client SHOULD wait for the response, then for EOF, and MUST tolerate EOF without a
+```json
+{ "id": 15, "ok": true, "result": {} }
+```
+
+The helper first turns merging off and sends the resulting `state` event (`state: "off"`, `tun` closed;
+section 4.4 rule 2, Appendix B), then sends the response, then runs the rest of the shutdown sequence
+of section 10.4 and closes the connection. If merging was already off and nothing changes, no `state`
+event precedes the response. The client SHOULD wait for the response, then for EOF, and MUST tolerate EOF without a
 response (the helper may have been killed meanwhile). After `quit` no new session is accepted.
 
 ---
@@ -1033,11 +1124,14 @@ response (the helper may have been killed meanwhile). After `quit` no new sessio
 
 ### 8.1 Event types
 
-| Event | Sent when | Needs `subscribe` |
-|---|---|---|
-| `stats` | every `interval_ms` while subscribed, starting right after the `subscribe` response | yes |
-| `state` | whenever `state`, `error`, `autopause.status`, `ipv6.effective`, `tun` or `capture` changes; at most once per change, immediately | no |
-| `log` | a warning or error the engine logged (`logx.Printf` lines starting with `warning:` or `error:`), peer rejections, and informational lifecycle lines | no |
+| Event   | Sent when                                                                                                                                                                                                                                                                                                                                                                                                                      | Needs `subscribe` |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------- |
+| `stats` | every `interval_ms` while subscribed, starting right after the `subscribe` response                                                                                                                                                                                                                                                                                                                                            | yes               |
+| `state` | whenever `state`, `error`, `autopause.status`, `ipv6.effective`, `tun` or `capture` changes; at most once per change, immediately. `exclude`, `include` and `set_weight` do not send a `state` event by themselves (the adapter set and weights are not part of it); their effect appears in the next `stats` event, and a `state` event is sent only if they change one of the listed fields (for example `autopause.status`) | no                |
+| `log`   | a warning or error the engine logged (`logx.Printf` lines starting with `warning:` or `error:`), peer rejections, and informational lifecycle lines                                                                                                                                                                                                                                                                            | no                |
+
+Stats timing: a `stats` tick that falls due while a command is being processed is held and sent right
+after that command's response, with `ts` taken at delivery. Ticks are never sent twice to catch up.
 
 Stats are emitted whether merging is on or off: the engine keeps running `Scheduler.Tick` (which reads
 the OS counters) and the probes at all times, so per-adapter speeds and internet status are live while
@@ -1048,56 +1142,106 @@ off, exactly as the tray's menu shows speeds while paused.
 Used as the `data` of `stats` events (plus `dropped`) and as the `status` result (plus `skipped`).
 
 ```json
-{"event":"stats","seq":42,"data":{
-  "ts":1760000001000,
-  "state":"on",
-  "state_since":1760000000120,
-  "error":null,
-  "capture":{"available":true,"error":null},
-  "autopause":{"enabled":true,"status":"armed"},
-  "ipv6":{"mode":"auto","effective":"refused","detail":"auto: refused, apps fall back to IPv4 so every adapter is used (not every adapter has IPv6)"},
-  "tun":{"name":"lychee-netd","open":true},
-  "totals":{"link_in_bps":9875000,"link_out_bps":412000,"relayed_in_bps":9100000,"relayed_out_bps":380000,"active_flows":41,"adapters_present":2,"adapters_usable":2},
-  "adapters":[
-    {"name":"Wi-Fi","ip":"192.168.1.23","ip6":"2001:db8:1::23","present":true,"excluded":false,
-     "state":"up","state6":"up","weight":1,"weight6":1,"weight_mode":"auto",
-     "peak_bps":6250000,"peak6_bps":2100000,
-     "active_flows":23,"total_flows":1510,"failed_flows":0,
-     "link_in_bps":6100000,"link_out_bps":250000,"relayed_in_bps":5800000,"relayed_out_bps":230000,
-     "bytes_in":3141592653,"bytes_out":271828182},
-    {"name":"Ethernet 3","ip":"10.42.0.5","ip6":null,"present":true,"excluded":false,
-     "state":"up","state6":"none","weight":0.61,"weight6":1,"weight_mode":"auto",
-     "peak_bps":3800000,"peak6_bps":0,
-     "active_flows":18,"total_flows":1204,"failed_flows":2,
-     "link_in_bps":3775000,"link_out_bps":162000,"relayed_in_bps":3300000,"relayed_out_bps":150000,
-     "bytes_in":2718281828,"bytes_out":161803398}
-  ],
-  "discovery_seq":3,
-  "dropped":0
-}}
+{
+  "event": "stats",
+  "seq": 42,
+  "data": {
+    "ts": 1760000001000,
+    "state": "on",
+    "state_since": 1760000000120,
+    "error": null,
+    "capture": { "available": true, "error": null },
+    "autopause": { "enabled": true, "status": "armed" },
+    "ipv6": {
+      "mode": "auto",
+      "effective": "refused",
+      "detail": "auto: refused, apps fall back to IPv4 so every adapter is used (not every adapter has IPv6)"
+    },
+    "tun": { "name": "lychee-netd", "open": true },
+    "totals": {
+      "link_in_bps": 9875000,
+      "link_out_bps": 412000,
+      "relayed_in_bps": 9100000,
+      "relayed_out_bps": 380000,
+      "active_flows": 41,
+      "adapters_present": 2,
+      "adapters_usable": 2
+    },
+    "adapters": [
+      {
+        "name": "Wi-Fi",
+        "ip": "192.168.1.23",
+        "ip6": "2001:db8:1::23",
+        "present": true,
+        "excluded": false,
+        "state": "up",
+        "state6": "up",
+        "weight": 1,
+        "weight6": 1,
+        "weight_mode": "auto",
+        "peak_bps": 6250000,
+        "peak6_bps": 2100000,
+        "active_flows": 23,
+        "total_flows": 1510,
+        "failed_flows": 0,
+        "link_in_bps": 6100000,
+        "link_out_bps": 250000,
+        "relayed_in_bps": 5800000,
+        "relayed_out_bps": 230000,
+        "bytes_in": 3141592653,
+        "bytes_out": 271828182
+      },
+      {
+        "name": "Ethernet 3",
+        "ip": "10.42.0.5",
+        "ip6": null,
+        "present": true,
+        "excluded": false,
+        "state": "up",
+        "state6": "none",
+        "weight": 0.61,
+        "weight6": 1,
+        "weight_mode": "auto",
+        "peak_bps": 3800000,
+        "peak6_bps": 0,
+        "active_flows": 18,
+        "total_flows": 1204,
+        "failed_flows": 2,
+        "link_in_bps": 3775000,
+        "link_out_bps": 162000,
+        "relayed_in_bps": 3300000,
+        "relayed_out_bps": 150000,
+        "bytes_in": 2718281828,
+        "bytes_out": 161803398
+      }
+    ],
+    "discovery_seq": 3,
+    "dropped": 0
+  }
+}
 ```
 
 Top-level fields:
 
-| Field | Type | Meaning |
-|---|---|---|
-| `ts` | integer | milliseconds since the Unix epoch when the snapshot was taken |
-| `state` | string (open) | `off`, `starting`, `on`, `paused_auto`, `error` (section 10.1) |
-| `state_since` | integer | `ts` of the last change of `state` |
-| `error` | object or null | `{"message": "..."}` when `state` is `error` (the last failed `on`), else null |
-| `capture` | object | as in `hello` |
-| `autopause.enabled` | boolean | |
-| `autopause.status` | string (open) | `disabled`, `armed`, `held`, `waiting`, `manual_off`, `idle` (section 10.1) |
-| `ipv6.mode` | string | `auto`, `on`, `off` (`Balancer.V6Mode`) |
-| `ipv6.effective` | string | `balanced` if `Balancer.V6Allowed()` is true now, else `refused` |
-| `ipv6.detail` | string | `Balancer.V6State()`, for display |
-| `tun.name` | string or null | the TUN adapter's OS name while it exists (`lychee-netd` on Linux and Windows, `utunN` on macOS), else null. Clients hide this adapter from their own interface lists. |
-| `tun.open` | boolean | the adapter exists (on macOS it stays open while `off`) |
-| `totals` | object | sums over adapters with `present: true` (including excluded ones): `link_in_bps`, `link_out_bps`, `relayed_in_bps`, `relayed_out_bps`, `active_flows`; `adapters_present` counts them; `adapters_usable` counts those with `state` or `state6` equal to `up` (the tray's `usable()`) |
-| `adapters` | array | one entry per adapter known to the scheduler or to the exclusion set, unordered; at most 64. Clients key by `name`. |
-| `discovery_seq` | integer | section 7.12 |
-| `dropped` | integer | `stats` events only: cumulative number of events of any type dropped for backpressure on this session (section 8.5) |
-| `skipped` | array | `status` only: as in `list_adapters` |
+| Field               | Type           | Meaning                                                                                                                                                                                                                                                                              |
+| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ts`                | integer        | milliseconds since the Unix epoch when the snapshot was taken                                                                                                                                                                                                                        |
+| `state`             | string (open)  | `off`, `starting`, `on`, `paused_auto`, `error` (section 10.1)                                                                                                                                                                                                                       |
+| `state_since`       | integer        | `ts` of the last change of `state`                                                                                                                                                                                                                                                   |
+| `error`             | object or null | `{"message": "..."}` when `state` is `error` (the last failed `on`), else null                                                                                                                                                                                                       |
+| `capture`           | object         | as in `hello`                                                                                                                                                                                                                                                                        |
+| `autopause.enabled` | boolean        |                                                                                                                                                                                                                                                                                      |
+| `autopause.status`  | string (open)  | `disabled`, `armed`, `held`, `waiting`, `manual_off`, `idle` (section 10.1)                                                                                                                                                                                                          |
+| `ipv6.mode`         | string         | `auto`, `on`, `off` (`Balancer.V6Mode`)                                                                                                                                                                                                                                              |
+| `ipv6.effective`    | string         | `balanced` if `Balancer.V6Allowed()` is true now, else `refused`                                                                                                                                                                                                                     |
+| `ipv6.detail`       | string         | `Balancer.V6State()`, for display                                                                                                                                                                                                                                                    |
+| `tun.name`          | string or null | the TUN adapter's OS name while it exists (`lychee-netd` on Linux and Windows, `utunN` on macOS), else null. Clients hide this adapter from their own interface lists.                                                                                                               |
+| `tun.open`          | boolean        | the adapter exists (on macOS it stays open while `off`)                                                                                                                                                                                                                              |
+| `totals`            | object         | sums over adapters with `present: true` (including excluded ones): `link_in_bps`, `link_out_bps`, `relayed_in_bps`, `relayed_out_bps`, `active_flows`; `adapters_present` counts them; `adapters_usable` counts those with `state` or `state6` equal to `up` (the tray's `usable()`) |
+| `adapters`          | array          | one entry per adapter known to the scheduler or to the exclusion set, unordered; at most 64. Clients key by `name`.                                                                                                                                                                  |
+| `discovery_seq`     | integer        | section 7.12                                                                                                                                                                                                                                                                         |
+| `dropped`           | integer        | `stats` events only: cumulative number of events of any type dropped for backpressure on this session (section 8.5)                                                                                                                                                                  |
+| `skipped`           | array          | `status` only: as in `list_adapters`                                                                                                                                                                                                                                                 |
 
 `totals.link_in_bps` and `totals.link_out_bps` are the "total combined speed". Per-adapter
 `link_in_bps`/`link_out_bps` are the "speed from each source". Both come from the OS counters and
@@ -1106,23 +1250,23 @@ net-merge's tray showed too.
 
 Adapter fields, with the `engine.SlotStats` field each comes from (full table in Appendix A):
 
-| Field | Type | Source | Notes |
-|---|---|---|---|
-| `name` | string | `Name` | unique; the key for every command |
-| `ip` | string or null | `IP` | null when empty |
-| `ip6` | string or null | `IP6` | null when empty |
-| `present` | boolean | `Present` | listed by the latest discovery. An adapter that vanished but still has active flows is reported with `false` until they end. |
-| `excluded` | boolean | exclusion set | not in `SlotStats` |
-| `state`, `state6` | string | `State`, `State6` | mapped: `"-"` to `none`, `"checking"` to `checking`, `"up"` to `up`, `"no internet"` to `down` |
-| `weight`, `weight6` | number | `Weight`, `Weight6` | `0` for an excluded adapter not in the scheduler |
-| `weight_mode` | string | override table | `auto` or `manual` |
-| `peak_bps`, `peak6_bps` | integer | `Peak`, `Peak6` | observed capacity through the helper, bytes/s, truncated |
-| `active_flows` | integer | `Active` | |
-| `total_flows` | integer | `Total` | |
-| `failed_flows` | integer | `Failed` | |
-| `link_in_bps`, `link_out_bps` | integer | `LinkIn`, `LinkOut` | OS counters, all apps, bytes/s, truncated |
-| `relayed_in_bps`, `relayed_out_bps` | integer | `RateIn`, `RateOut` | through the helper, both families summed, bytes/s |
-| `bytes_in`, `bytes_out` | integer | `BytesIn`, `BytesOut` | cumulative through the helper since the slot was created |
+| Field                               | Type           | Source                | Notes                                                                                                                        |
+| ----------------------------------- | -------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `name`                              | string         | `Name`                | unique; the key for every command                                                                                            |
+| `ip`                                | string or null | `IP`                  | null when empty                                                                                                              |
+| `ip6`                               | string or null | `IP6`                 | null when empty                                                                                                              |
+| `present`                           | boolean        | `Present`             | listed by the latest discovery. An adapter that vanished but still has active flows is reported with `false` until they end. |
+| `excluded`                          | boolean        | exclusion set         | not in `SlotStats`                                                                                                           |
+| `state`, `state6`                   | string         | `State`, `State6`     | mapped: `"-"` to `none`, `"checking"` to `checking`, `"up"` to `up`, `"no internet"` to `down`                               |
+| `weight`, `weight6`                 | number         | `Weight`, `Weight6`   | `0` for an excluded adapter not in the scheduler                                                                             |
+| `weight_mode`                       | string         | override table        | `auto` or `manual`                                                                                                           |
+| `peak_bps`, `peak6_bps`             | integer        | `Peak`, `Peak6`       | observed capacity through the helper, bytes/s, truncated                                                                     |
+| `active_flows`                      | integer        | `Active`              |                                                                                                                              |
+| `total_flows`                       | integer        | `Total`               |                                                                                                                              |
+| `failed_flows`                      | integer        | `Failed`              |                                                                                                                              |
+| `link_in_bps`, `link_out_bps`       | integer        | `LinkIn`, `LinkOut`   | OS counters, all apps, bytes/s, truncated                                                                                    |
+| `relayed_in_bps`, `relayed_out_bps` | integer        | `RateIn`, `RateOut`   | through the helper, both families summed, bytes/s                                                                            |
+| `bytes_in`, `bytes_out`             | integer        | `BytesIn`, `BytesOut` | cumulative through the helper since the slot was created                                                                     |
 
 All rates are bytes per second as integers (floats truncated toward zero). Clients multiply by 8 for
 bit/s, as `tray.mbps` does. For an adapter that is excluded and therefore absent from the scheduler, the
@@ -1135,14 +1279,20 @@ The subset of `Snapshot` that describes state, sent on every change so a client 
 interval still reacts at once:
 
 ```json
-{"event":"state","seq":43,"data":{
-  "ts":1760000002000,
-  "state":"paused_auto","state_since":1760000002000,"error":null,
-  "capture":{"available":true,"error":null},
-  "autopause":{"enabled":true,"status":"waiting"},
-  "ipv6":{"mode":"auto","effective":"refused","detail":"..."},
-  "tun":{"name":"lychee-netd","open":false}
-}}
+{
+  "event": "state",
+  "seq": 43,
+  "data": {
+    "ts": 1760000002000,
+    "state": "paused_auto",
+    "state_since": 1760000002000,
+    "error": null,
+    "capture": { "available": true, "error": null },
+    "autopause": { "enabled": true, "status": "waiting" },
+    "ipv6": { "mode": "auto", "effective": "refused", "detail": "..." },
+    "tun": { "name": "lychee-netd", "open": false }
+  }
+}
 ```
 
 Fields have the meanings of section 8.2. One `state` event is sent right after a successful `hello` so
@@ -1151,13 +1301,17 @@ the client has the state without calling `status` (it still needs `status` or `s
 ### 8.4 `log` event
 
 ```json
-{"event":"log","seq":44,"data":{"level":"warn","message":"IPv6 not captured: operation not permitted"}}
+{
+  "event": "log",
+  "seq": 44,
+  "data": { "level": "warn", "message": "IPv6 not captured: operation not permitted" }
+}
 ```
 
-| Field | Type | Rules |
-|---|---|---|
-| `level` | string (open) | `info`, `warn`, `error` |
-| `message` | string | at most 1024 bytes, UTF-8, control characters other than tab removed |
+| Field     | Type          | Rules                                                                |
+| --------- | ------------- | -------------------------------------------------------------------- |
+| `level`   | string (open) | `info`, `warn`, `error`                                              |
+| `message` | string        | at most 1024 bytes, UTF-8, control characters other than tab removed |
 
 `log` events are for the client's log file and diagnostics export; they are not a programmatic
 interface. The helper rate-limits them to 20 per second per session; excess messages are dropped and
@@ -1181,23 +1335,23 @@ Clients SHOULD read continuously and treat a rising `dropped` as a sign to lengt
 
 ## 9. Error codes
 
-| Code | Meaning | `error.data` | Connection |
-|---|---|---|---|
-| `bad_request` | the frame is not valid UTF-8/JSON/object, the envelope is malformed, or an argument is missing, of the wrong type or an invalid enum value | `field` when known | closed when the envelope could not be decoded; stays open for argument errors |
-| `frame_too_large` | a line exceeded 65536 bytes | | closed |
-| `too_many_requests` | more than 16 unanswered requests | | closed |
-| `unknown_command` | `cmd` is not in the allowlist | `cmd` | open |
-| `unknown_field` | a field not defined for this request or command | `field` (dotted path, e.g. `args.interval`) | open |
-| `hello_required` | first request was not `hello`, or `hello` did not arrive within 5 s | | closed |
-| `version_unsupported` | no common protocol version | `supported` (array) | closed |
-| `busy` | a session already exists | `session_pid` | closed |
-| `invalid_state` | the command is not allowed in the current state (`cleanup` while not off; second `hello`) | `state` | open |
-| `unknown_adapter` | the name is not in the current discovery result or the relevant set | `adapter` | open |
-| `out_of_range` | a number is outside its documented range | `field`, `min`, `max` | open |
-| `no_adapters` | `on` with no present, non-excluded adapter | | open |
-| `unsupported_platform` | `on` while `capture.available` is false | `error` (the driver message) | open |
-| `permission_denied` | the operating system refused a privileged operation the helper expected to be allowed | | open |
-| `internal` | the command failed for a reason reported in `message` (`tun.On` errors, deadline expired, cleanup failure) | | open |
+| Code                   | Meaning                                                                                                                                    | `error.data`                                | Connection                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `bad_request`          | the frame is not valid UTF-8/JSON/object, the envelope is malformed, or an argument is missing, of the wrong type or an invalid enum value | `field` when known                          | closed when the envelope could not be decoded; stays open for argument errors |
+| `frame_too_large`      | a line exceeded 65536 bytes                                                                                                                |                                             | closed                                                                        |
+| `too_many_requests`    | more than 16 unanswered requests                                                                                                           |                                             | closed                                                                        |
+| `unknown_command`      | `cmd` is not in the allowlist                                                                                                              | `cmd`                                       | open                                                                          |
+| `unknown_field`        | a field not defined for this request or command                                                                                            | `field` (dotted path, e.g. `args.interval`) | open                                                                          |
+| `hello_required`       | first request was not `hello`, or `hello` did not arrive within 5 s                                                                        |                                             | closed                                                                        |
+| `version_unsupported`  | no common protocol version                                                                                                                 | `supported` (array)                         | closed                                                                        |
+| `busy`                 | a session already exists                                                                                                                   | `session_pid`                               | closed                                                                        |
+| `invalid_state`        | the command is not allowed in the current state (`cleanup` while not off; second `hello`)                                                  | `state`                                     | open                                                                          |
+| `unknown_adapter`      | the name is not in the current discovery result or the relevant set                                                                        | `adapter`                                   | open                                                                          |
+| `out_of_range`         | a number is outside its documented range                                                                                                   | `field`, `min`, `max`                       | open                                                                          |
+| `no_adapters`          | `on` with no present, non-excluded adapter                                                                                                 |                                             | open                                                                          |
+| `unsupported_platform` | `on` while `capture.available` is false                                                                                                    | `error` (the driver message)                | open                                                                          |
+| `permission_denied`    | the operating system refused a privileged operation the helper expected to be allowed                                                      |                                             | open                                                                          |
+| `internal`             | the command failed for a reason reported in `message` (`tun.On` errors, deadline expired, cleanup failure)                                 |                                             | open                                                                          |
 
 "Closed" errors are sent as the last frame before the helper shuts the connection. If the connection
 was the session, the grace period starts; if it was a connection awaiting `hello`, nothing else
@@ -1213,37 +1367,37 @@ client bug or an incompatible helper, except `busy`, which indicates another cli
 The `state` field of `Snapshot` is derived from the TUN and the `autoPauser` exactly as the tray's
 header is (`trayUI.refresh`), with this precedence:
 
-| State | Condition |
-|---|---|
-| `starting` | an `on` is executing `tun.On` |
-| `on` | `tun.IsOn()` |
-| `error` | not on, and the last `on` (manual or automatic resume) failed; cleared by the next `on` or `off` |
-| `paused_auto` | not on, autopause enabled, `waiting` and not `manualOff` (the tray's "Paused: one connection") |
-| `off` | otherwise |
+| State         | Condition                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `starting`    | an `on` is executing `tun.On`                                                                    |
+| `on`          | `tun.IsOn()`                                                                                     |
+| `error`       | not on, and the last `on` (manual or automatic resume) failed; cleared by the next `on` or `off` |
+| `paused_auto` | not on, autopause enabled, `waiting` and not `manualOff` (the tray's "Paused: one connection")   |
+| `off`         | otherwise                                                                                        |
 
 `autopause.status` is derived from `autoPauser` fields:
 
-| Status | Condition |
-|---|---|
-| `disabled` | `!enabled` |
-| `held` | enabled, merging on, `held` (started by hand with one usable adapter; no automatic pause until two have been seen together) |
-| `armed` | enabled, merging on, not held |
-| `manual_off` | enabled, merging off, `manualOff` (the user sent `off`, or nothing was ever turned on): never resumes by itself |
-| `waiting` | enabled, merging off, `waiting` and not `manualOff`: resumes by itself when two adapters are usable |
-| `idle` | enabled, merging off, neither (transient) |
+| Status       | Condition                                                                                                                                                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `disabled`   | `!enabled`                                                                                                                                                                                                                   |
+| `held`       | enabled, merging on, `held`: set at `on` when fewer than two adapters are usable (present, not excluded, `state` or `state6` up); cleared as soon as two are usable at the same time while on. No automatic pause while held |
+| `armed`      | enabled, merging on, not held                                                                                                                                                                                                |
+| `manual_off` | enabled, merging off, `manualOff` (the user sent `off`, or nothing was ever turned on): never resumes by itself                                                                                                              |
+| `waiting`    | enabled, merging off, `waiting` and not `manualOff`: resumes by itself when two adapters are usable                                                                                                                          |
+| `idle`       | enabled, merging off, neither (transient)                                                                                                                                                                                    |
 
 Transitions:
 
-| From | Trigger | To |
-|---|---|---|
-| any | helper start | `off`, autopause `manual_off` (merging is never started without an `on` request in this helper's lifetime) |
-| `off`, `paused_auto`, `error` | `on` accepted | `starting`, then `on`; or `error` if `tun.On` fails |
-| `on` | fewer than two usable adapters for 10 s with nothing moving, or 2 min with traffic, at least 30 s after the last automatic switch, and not held | `paused_auto` |
-| `paused_auto` | two or more usable adapters for 3 s, at least 30 s after the last automatic switch | `starting`, then `on`; on failure `error`, retried after the gap |
-| `on`, `paused_auto`, `error` | `off` | `off`, autopause `manual_off` |
-| `paused_auto` | `set_autopause false` | `off` |
-| `off` (not `manual_off`) | `set_autopause true` | `paused_auto` |
-| any | `quit`, SIGTERM, grace expiry | `off`, then exit |
+| From                          | Trigger                                                                                                                                         | To                                                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| any                           | helper start                                                                                                                                    | `off`, autopause `manual_off` (merging is never started without an `on` request in this helper's lifetime) |
+| `off`, `paused_auto`, `error` | `on` accepted                                                                                                                                   | `starting`, then `on`; or `error` if `tun.On` fails                                                        |
+| `on`                          | fewer than two usable adapters for 10 s with nothing moving, or 2 min with traffic, at least 30 s after the last automatic switch, and not held | `paused_auto`                                                                                              |
+| `paused_auto`                 | two or more usable adapters for 3 s, at least 30 s after the last automatic switch                                                              | `starting`, then `on`; on failure `error`, retried after the gap                                           |
+| `on`, `paused_auto`, `error`  | `off`                                                                                                                                           | `off`, autopause `manual_off`                                                                              |
+| `paused_auto`                 | `set_autopause false`                                                                                                                           | `off`                                                                                                      |
+| `off` (not `manual_off`)      | `set_autopause true`                                                                                                                            | `paused_auto`                                                                                              |
+| any                           | `quit`, SIGTERM, grace expiry                                                                                                                   | `off`, then exit                                                                                           |
 
 The timing constants are `internal/control/autopause.go`'s (`pauseAfterIdle` 10 s, `pauseAfterBusy` 2 min,
 `resumeAfter` 3 s, `autoGap` 30 s, `quietRate` 50 000 bytes/s) and are informative here; the state
@@ -1382,7 +1536,7 @@ If the helper dies without running 10.4 (kill -9, panic, power loss of the proce
   `/var/run/net-merge.lock`, `Global\net-merge`: the `InstanceRunning` checks of net-merge's
   `internal/platform`, kept for this purpose). If one is held, the helper exits 4 with
   `another connection-merging tool is running` on stderr, because both tools would install the same
-  `/1` capture routes. Clients show that message for exit 4. A net-merge started *after* `lychee-netd`
+  `/1` capture routes. Clients show that message for exit 4. A net-merge started _after_ `lychee-netd`
   does not know Lychee's lock; its own `route add` then fails (or, on Windows, the last route added
   wins) and the user removes one of the two tools.
 - The adapters never collide: the helper's TUN is named `lychee-netd` (Linux, Windows) with its own fixed
@@ -1531,102 +1685,102 @@ builds on; privileged tests are gated behind the existing e2e scripts.
 
 ### 12.2 Framing and decoding (`native/netd/internal/control/server_frame_test.go`)
 
-| Test | Expectation |
-|---|---|
-| `TestFrameTooLargeCloses` | a 65537-byte line gets `frame_too_large` with `id: null`, then EOF |
-| `TestInvalidJSONCloses` | `{"id":1,` gets `bad_request`, EOF |
-| `TestNonObjectCloses` | `[1,2]` and `"x"` get `bad_request`, EOF |
-| `TestInvalidUTF8Closes`, `TestNULByteCloses` | `bad_request`, EOF |
-| `TestEmptyLinesIgnored` | `\n\n{"id":1,...}` is answered normally |
-| `TestUnknownTopLevelField` | `{"id":1,"cmd":"status","extra":1}` gets `unknown_field` with `data.field = "extra"`, connection open |
-| `TestUnknownArgField` | `subscribe` with `{"interval":1}` gets `unknown_field` `args.interval` |
-| `TestWrongType` | `set_autopause` with `{"enabled":"yes"}`, `{"enabled":1}` get `bad_request` |
-| `TestMissingId`, `TestZeroId`, `TestFloatId`, `TestDuplicateInFlightId` | `bad_request`, EOF |
-| `TestUnknownCommand` | `unknown_command`, open |
-| `TestInFlightLimit` | 17 requests without reading responses: 16 answered, then `too_many_requests`, EOF |
-| `TestResponsesInOrder` | ids 5,3,9 sent pipelined are answered 5,3,9 |
-| `FuzzRequestDecoder` | Go native fuzzing of the decoder: never panics, never allocates beyond the limit, every outcome is one of the documented errors or a valid request |
+| Test                                                                    | Expectation                                                                                                                                        |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestFrameTooLargeCloses`                                               | a 65537-byte line gets `frame_too_large` with `id: null`, then EOF                                                                                 |
+| `TestInvalidJSONCloses`                                                 | `{"id":1,` gets `bad_request`, EOF                                                                                                                 |
+| `TestNonObjectCloses`                                                   | `[1,2]` and `"x"` get `bad_request`, EOF                                                                                                           |
+| `TestInvalidUTF8Closes`, `TestNULByteCloses`                            | `bad_request`, EOF                                                                                                                                 |
+| `TestEmptyLinesIgnored`                                                 | `\n\n{"id":1,...}` is answered normally                                                                                                            |
+| `TestUnknownTopLevelField`                                              | `{"id":1,"cmd":"status","extra":1}` gets `unknown_field` with `data.field = "extra"`, connection open                                              |
+| `TestUnknownArgField`                                                   | `subscribe` with `{"interval":1}` gets `unknown_field` `args.interval`                                                                             |
+| `TestWrongType`                                                         | `set_autopause` with `{"enabled":"yes"}`, `{"enabled":1}` get `bad_request`                                                                        |
+| `TestMissingId`, `TestZeroId`, `TestFloatId`, `TestDuplicateInFlightId` | `bad_request`, EOF                                                                                                                                 |
+| `TestUnknownCommand`                                                    | `unknown_command`, open                                                                                                                            |
+| `TestInFlightLimit`                                                     | 17 requests without reading responses: 16 answered, then `too_many_requests`, EOF                                                                  |
+| `TestResponsesInOrder`                                                  | ids 5,3,9 sent pipelined are answered 5,3,9                                                                                                        |
+| `FuzzRequestDecoder`                                                    | Go native fuzzing of the decoder: never panics, never allocates beyond the limit, every outcome is one of the documented errors or a valid request |
 
 ### 12.3 Handshake and sessions (`native/netd/internal/control/server_session_test.go`)
 
-| Test | Expectation |
-|---|---|
-| `TestHelloRequired` | `status` first gets `hello_required`, EOF |
-| `TestHelloTimeout` | no frame for 5 s (fake clock) closes with `hello_required` |
-| `TestHelloVersionMismatch` | `protocol:[2]` gets `version_unsupported` with `supported:[1]`, EOF |
-| `TestHelloPicksHighest` | `protocol:[1,7]` on a helper supporting 1 gives 1 |
-| `TestHelloBadClientName` | `client:"a b"` gets `bad_request`, EOF |
-| `TestHelloResultFields` | every field of section 5.2 present with the documented types; `instance` is 32 hex chars; `limits` match section 1.5 |
-| `TestStateEventAfterHello` | the first frame after the `hello` response is a `state` event with `seq: 1` |
-| `TestSecondHelloInvalidState` | `invalid_state`, session continues |
-| `TestBusy` | a second connection's `hello` gets `busy` with the first client's pid, EOF; the first session is unaffected |
-| `TestPendingConnectionCap` | a fifth connection awaiting `hello` is closed without bytes |
-| `TestGraceExitsHelper` | session drops without `quit`; after 10 s (fake clock) the engine's `Off` was called and the server returned |
-| `TestGracePreservesState` | `on`, `exclude`, `set_weight`, drop, reconnect at 9 s: `hello` reports the same `instance`, `session: 2`, `status` shows state preserved, no subscription |
-| `TestGraceRestartsAfterFailedHello` | reconnect at 8 s, send garbage; timer restarts; exit at 18 s |
-| `TestStartupTimeout` | no connection for 30 s exits |
-| `TestQuit` | response, then engine `Off`, then EOF; socket unlinked |
-| `TestSignalIsQuit` | SIGTERM runs the same shutdown |
+| Test                                | Expectation                                                                                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestHelloRequired`                 | `status` first gets `hello_required`, EOF                                                                                                                 |
+| `TestHelloTimeout`                  | no frame for 5 s (fake clock) closes with `hello_required`                                                                                                |
+| `TestHelloVersionMismatch`          | `protocol:[2]` gets `version_unsupported` with `supported:[1]`, EOF                                                                                       |
+| `TestHelloPicksHighest`             | `protocol:[1,7]` on a helper supporting 1 gives 1                                                                                                         |
+| `TestHelloBadClientName`            | `client:"a b"` gets `bad_request`, EOF                                                                                                                    |
+| `TestHelloResultFields`             | every field of section 5.2 present with the documented types; `instance` is 32 hex chars; `limits` match section 1.5                                      |
+| `TestStateEventAfterHello`          | the first frame after the `hello` response is a `state` event with `seq: 1`                                                                               |
+| `TestSecondHelloInvalidState`       | `invalid_state`, session continues                                                                                                                        |
+| `TestBusy`                          | a second connection's `hello` gets `busy` with the first client's pid, EOF; the first session is unaffected                                               |
+| `TestPendingConnectionCap`          | a fifth connection awaiting `hello` is closed without bytes                                                                                               |
+| `TestGraceExitsHelper`              | session drops without `quit`; after 10 s (fake clock) the engine's `Off` was called and the server returned                                               |
+| `TestGracePreservesState`           | `on`, `exclude`, `set_weight`, drop, reconnect at 9 s: `hello` reports the same `instance`, `session: 2`, `status` shows state preserved, no subscription |
+| `TestGraceRestartsAfterFailedHello` | reconnect at 8 s, send garbage; timer restarts; exit at 18 s                                                                                              |
+| `TestStartupTimeout`                | no connection for 30 s exits                                                                                                                              |
+| `TestQuit`                          | response, then engine `Off`, then EOF; socket unlinked                                                                                                    |
+| `TestSignalIsQuit`                  | SIGTERM runs the same shutdown                                                                                                                            |
 
 ### 12.4 Commands and state machine (`native/netd/internal/control/server_cmd_test.go`)
 
-| Test | Expectation |
-|---|---|
-| `TestStartsOff` | fresh helper: `status.state = off`, `autopause.status = manual_off`, fake engine `On` never called |
-| `TestOnOffIdempotent` | `on` twice calls engine `On` once; `off` twice is fine |
-| `TestOnEmitsStateEvents` | `starting` then `on` events precede the response |
-| `TestOnFailureSetsError` | engine `On` returns an error: response `internal`, state `error` with the message, `off` clears it |
-| `TestOnNoAdapters` | empty snapshot: `no_adapters` |
-| `TestOnUnsupportedPlatform` | `capture.available=false`: `unsupported_platform` |
-| `TestAutopauseStates` | drive `autoPauser` through `held`, `armed`, `waiting`, `manual_off`, `disabled`, `idle` with the fake clock and check `autopause.status` and `state = paused_auto` |
-| `TestAutopauseNeverStartsWithoutOn` | enabled, two usable adapters, no `on`: stays `off` forever |
-| `TestSetIPv6` | each mode round-trips; `effective` follows `V6Allowed`; invalid string is `bad_request` |
-| `TestExcludeInclude` | unknown name is `unknown_adapter`; known name sets the flag, engine `SetExcluded` called; idempotent; excluded adapter appears in stats with `excluded: true` and link rates |
-| `TestSetWeight` | 0.049 and 100.1 are `out_of_range` with `min`/`max`; `"auto"` clears; `"Auto"` and `true` are `bad_request`; `weight_mode` reported |
-| `TestListAdaptersCaps` | 70 adapters: 64 returned, `truncated: true` |
-| `TestCleanupOnlyWhenOff` | `invalid_state` with `data.state` while `on` and `paused_auto`; succeeds while `off` and `error` |
-| `TestStringsNeverReachExec` | the fake engine records every string it receives; a request with an adapter name containing `; rm -rf` is `unknown_adapter` and the name never reaches the engine |
+| Test                                | Expectation                                                                                                                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestStartsOff`                     | fresh helper: `status.state = off`, `autopause.status = manual_off`, fake engine `On` never called                                                                           |
+| `TestOnOffIdempotent`               | `on` twice calls engine `On` once; `off` twice is fine                                                                                                                       |
+| `TestOnEmitsStateEvents`            | `starting` then `on` events precede the response                                                                                                                             |
+| `TestOnFailureSetsError`            | engine `On` returns an error: response `internal`, state `error` with the message, `off` clears it                                                                           |
+| `TestOnNoAdapters`                  | empty snapshot: `no_adapters`                                                                                                                                                |
+| `TestOnUnsupportedPlatform`         | `capture.available=false`: `unsupported_platform`                                                                                                                            |
+| `TestAutopauseStates`               | drive `autoPauser` through `held`, `armed`, `waiting`, `manual_off`, `disabled`, `idle` with the fake clock and check `autopause.status` and `state = paused_auto`           |
+| `TestAutopauseNeverStartsWithoutOn` | enabled, two usable adapters, no `on`: stays `off` forever                                                                                                                   |
+| `TestSetIPv6`                       | each mode round-trips; `effective` follows `V6Allowed`; invalid string is `bad_request`                                                                                      |
+| `TestExcludeInclude`                | unknown name is `unknown_adapter`; known name sets the flag, engine `SetExcluded` called; idempotent; excluded adapter appears in stats with `excluded: true` and link rates |
+| `TestSetWeight`                     | 0.049 and 100.1 are `out_of_range` with `min`/`max`; `"auto"` clears; `"Auto"` and `true` are `bad_request`; `weight_mode` reported                                          |
+| `TestListAdaptersCaps`              | 70 adapters: 64 returned, `truncated: true`                                                                                                                                  |
+| `TestCleanupOnlyWhenOff`            | `invalid_state` with `data.state` while `on` and `paused_auto`; succeeds while `off` and `error`                                                                             |
+| `TestStringsNeverReachExec`         | the fake engine records every string it receives; a request with an adapter name containing `; rm -rf` is `unknown_adapter` and the name never reaches the engine            |
 
 ### 12.5 Stats stream (`native/netd/internal/control/server_stats_test.go`)
 
-| Test | Expectation |
-|---|---|
-| `TestSubscribeIntervalRange` | 249 and 5001 are `out_of_range`; default is 1000; re-subscribe changes the interval |
-| `TestStatsFieldMapping` | a `SlotStats` with every field set to a distinct value produces exactly the JSON of Appendix A, including the state string mapping and integer truncation |
-| `TestStatsWhileOff` | stats events arrive while `off` with non-zero link rates from the fake |
-| `TestTotals` | sums over present adapters only, excluded included, absent excluded |
-| `TestStatsFrameFits` | 64 adapters with 256-byte names stay under 65536 bytes |
-| `TestSeqMonotonic` | `seq` increases by 1 across `stats`, `state` and `log` events |
+| Test                         | Expectation                                                                                                                                                                                                                  |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestSubscribeIntervalRange` | 249 and 5001 are `out_of_range`; default is 1000; re-subscribe changes the interval                                                                                                                                          |
+| `TestStatsFieldMapping`      | a `SlotStats` with every field set to a distinct value produces exactly the JSON of Appendix A, including the state string mapping and integer truncation                                                                    |
+| `TestStatsWhileOff`          | stats events arrive while `off` with non-zero link rates from the fake                                                                                                                                                       |
+| `TestTotals`                 | sums over present adapters only, excluded included, absent excluded                                                                                                                                                          |
+| `TestStatsFrameFits`         | 64 adapters with 256-byte names stay under 65536 bytes                                                                                                                                                                       |
+| `TestSeqMonotonic`           | `seq` increases by 1 across `stats`, `state` and `log` events                                                                                                                                                                |
 | `TestBackpressureDropsStats` | a client that stops reading: after the queue fills, `dropped` grows, `seq` has gaps, a `state` change still closes the connection only when its enqueue fails; a `status` response is never dropped while the queue has room |
-| `TestWriteStallCloses` | a client that never reads is disconnected after 30 s and the grace timer starts |
-| `TestLogRateLimit` | 100 warnings in a second: at most 20 delivered, the rest counted |
+| `TestWriteStallCloses`       | a client that never reads is disconnected after 30 s and the grace timer starts                                                                                                                                              |
+| `TestLogRateLimit`           | 100 warnings in a second: at most 20 delivered, the rest counted                                                                                                                                                             |
 
 ### 12.6 Transport and peer credentials (`native/netd/internal/control/transport_*_test.go`)
 
-| Test | Platform | Expectation |
-|---|---|---|
-| `TestPeerCheckRejectsOtherUid` | all Unix | with the real check function and a temp socket created `0666` for the test, connect from a child process running as another uid (`SysProcAttr.Credential{Uid: 65534}`, skipped unless the test runs as root): the child sees EOF with zero bytes received; the server logs the rejection |
-| `TestPeerCheckAcceptsSelfAndRoot` | all Unix | same uid accepted; uid 0 accepted (injected credentials) |
-| `TestPeerCheckRejectsPidZero` | Linux | injected `pid: 0` rejected |
-| `TestSocketModeAndOwner` | all Unix | after start: `lstat` mode `0600`, owner as specified; directory `0700`/`0755` |
-| `TestRefusesSymlinkPath`, `TestRefusesRegularFile`, `TestRefusesForeignSocket` | all Unix | exit 3 paths, nothing unlinked |
-| `TestStaleSocketReplaced` | all Unix | a dead socket at the path is unlinked and replaced |
-| `TestLiveSocketRefused` | all Unix | a listening socket at the path: exit 4, not unlinked |
-| `TestRootRequiresFixedPath` | Linux, macOS, root only | `--control /tmp/x.sock` as root: exit 3 |
-| `TestXDGRuntimeDirChecks` | Linux | unset, relative, wrong owner, `0755`: exit 3 |
-| `TestSelfCheck` | macOS, Linux root | a copy of the test binary in a user-writable directory fails the self-check |
-| `TestPipeFirstInstance` | Windows | pre-create the pipe name: helper exits 5 |
-| `TestPipeDACL` | Windows | the created pipe's security descriptor, converted to SDDL, contains exactly the ACEs of section 2.4 |
-| `TestPipeNameMustMatchSID` | Windows | `--control \\.\pipe\lychee-netd-S-1-5-18`: exit 3 |
-| `TestPipeClientSidCheck` | Windows | own process accepted; rejection of another user is a manual test (below) |
-| `TestWindowsRequiresElevatedToken` | Windows | `serve` started under a restricted token (`CreateRestrictedToken` with `DISABLE_MAX_PRIVILEGE`, or `runas /trustlevel:0x20000`) exits 6 before creating the pipe or touching Wintun; under the test's elevated token the check passes |
-| `TestRefusesNetMergeLock` | all | with `@net-merge` / `/var/run/net-merge.lock` / `Global\net-merge` pre-held by the test: exit 4, stderr `another connection-merging tool is running`, nothing created |
-| `TestFuzzPeerCheckInputs` | all | the credential parsing (`PKEXEC_UID`, `SUDO_UID`) rejects `"1000x"`, `"-1"`, `" 1000"`, `""`, `"99999999999"` |
+| Test                                                                           | Platform                | Expectation                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestPeerCheckRejectsOtherUid`                                                 | all Unix                | with the real check function and a temp socket created `0666` for the test, connect from a child process running as another uid (`SysProcAttr.Credential{Uid: 65534}`, skipped unless the test runs as root): the child sees EOF with zero bytes received; the server logs the rejection |
+| `TestPeerCheckAcceptsSelfAndRoot`                                              | all Unix                | same uid accepted; uid 0 accepted (injected credentials)                                                                                                                                                                                                                                 |
+| `TestPeerCheckRejectsPidZero`                                                  | Linux                   | injected `pid: 0` rejected                                                                                                                                                                                                                                                               |
+| `TestSocketModeAndOwner`                                                       | all Unix                | after start: `lstat` mode `0600`, owner as specified; directory `0700`/`0755`                                                                                                                                                                                                            |
+| `TestRefusesSymlinkPath`, `TestRefusesRegularFile`, `TestRefusesForeignSocket` | all Unix                | exit 3 paths, nothing unlinked                                                                                                                                                                                                                                                           |
+| `TestStaleSocketReplaced`                                                      | all Unix                | a dead socket at the path is unlinked and replaced                                                                                                                                                                                                                                       |
+| `TestLiveSocketRefused`                                                        | all Unix                | a listening socket at the path: exit 4, not unlinked                                                                                                                                                                                                                                     |
+| `TestRootRequiresFixedPath`                                                    | Linux, macOS, root only | `--control /tmp/x.sock` as root: exit 3                                                                                                                                                                                                                                                  |
+| `TestXDGRuntimeDirChecks`                                                      | Linux                   | unset, relative, wrong owner, `0755`: exit 3                                                                                                                                                                                                                                             |
+| `TestSelfCheck`                                                                | macOS, Linux root       | a copy of the test binary in a user-writable directory fails the self-check                                                                                                                                                                                                              |
+| `TestPipeFirstInstance`                                                        | Windows                 | pre-create the pipe name: helper exits 5                                                                                                                                                                                                                                                 |
+| `TestPipeDACL`                                                                 | Windows                 | the created pipe's security descriptor, converted to SDDL, contains exactly the ACEs of section 2.4                                                                                                                                                                                      |
+| `TestPipeNameMustMatchSID`                                                     | Windows                 | `--control \\.\pipe\lychee-netd-S-1-5-18`: exit 3                                                                                                                                                                                                                                        |
+| `TestPipeClientSidCheck`                                                       | Windows                 | own process accepted; rejection of another user is a manual test (below)                                                                                                                                                                                                                 |
+| `TestWindowsRequiresElevatedToken`                                             | Windows                 | `serve` started under a restricted token (`CreateRestrictedToken` with `DISABLE_MAX_PRIVILEGE`, or `runas /trustlevel:0x20000`) exits 6 before creating the pipe or touching Wintun; under the test's elevated token the check passes                                                    |
+| `TestRefusesNetMergeLock`                                                      | all                     | with `@net-merge` / `/var/run/net-merge.lock` / `Global\net-merge` pre-held by the test: exit 4, stderr `another connection-merging tool is running`, nothing created                                                                                                                    |
+| `TestFuzzPeerCheckInputs`                                                      | all                     | the credential parsing (`PKEXEC_UID`, `SUDO_UID`) rejects `"1000x"`, `"-1"`, `" 1000"`, `""`, `"99999999999"`                                                                                                                                                                            |
 
 ### 12.7 End-to-end and manual
 
 - `native/netd/scripts/linux-e2e.sh` gains a helper run: start `sudo lychee-netd serve --control
-  /run/lychee-netd/netd.sock` with `SUDO_UID` set to the test user; a small Go or Python client
+/run/lychee-netd/netd.sock` with `SUDO_UID` set to the test user; a small Go or Python client
   running as that user does `hello`, `subscribe`, `on`; verify traffic uses both uplinks as the existing
   test does; `kill -9` the helper; verify routes are gone and the socket is stale; start again; verify
   the stale socket was replaced; `quit`; verify exit 0 and no socket.
@@ -1648,29 +1802,29 @@ builds on; privileged tests are gated behind the existing e2e scripts.
 
 ## Appendix A: SlotStats field mapping
 
-| JSON field (`adapters[]`) | `engine.SlotStats` | Conversion |
-|---|---|---|
-| `name` | `Name` | as is |
-| `ip` | `IP` | `""` becomes `null` |
-| `ip6` | `IP6` | `""` becomes `null` |
-| `present` | `Present` | as is |
-| `excluded` | (exclusion set) | `true` if `Name` is excluded |
-| `state` | `State` | `"-"`→`"none"`, `"checking"`→`"checking"`, `"up"`→`"up"`, `"no internet"`→`"down"` |
-| `state6` | `State6` | same mapping |
-| `weight` | `Weight` | number as is |
-| `weight6` | `Weight6` | number as is |
-| `weight_mode` | (override table) | `"manual"` if an override exists for `Name`, else `"auto"` |
-| `peak_bps` | `Peak` | `int64(math.Trunc(v))` |
-| `peak6_bps` | `Peak6` | same |
-| `active_flows` | `Active` | as is |
-| `total_flows` | `Total` | as is |
-| `failed_flows` | `Failed` | as is |
-| `link_in_bps` | `LinkIn` | truncated to integer |
-| `link_out_bps` | `LinkOut` | truncated to integer |
-| `relayed_in_bps` | `RateIn` | truncated to integer |
-| `relayed_out_bps` | `RateOut` | truncated to integer |
-| `bytes_in` | `BytesIn` | as is |
-| `bytes_out` | `BytesOut` | as is |
+| JSON field (`adapters[]`) | `engine.SlotStats` | Conversion                                                                         |
+| ------------------------- | ------------------ | ---------------------------------------------------------------------------------- |
+| `name`                    | `Name`             | as is                                                                              |
+| `ip`                      | `IP`               | `""` becomes `null`                                                                |
+| `ip6`                     | `IP6`              | `""` becomes `null`                                                                |
+| `present`                 | `Present`          | as is                                                                              |
+| `excluded`                | (exclusion set)    | `true` if `Name` is excluded                                                       |
+| `state`                   | `State`            | `"-"`→`"none"`, `"checking"`→`"checking"`, `"up"`→`"up"`, `"no internet"`→`"down"` |
+| `state6`                  | `State6`           | same mapping                                                                       |
+| `weight`                  | `Weight`           | number as is                                                                       |
+| `weight6`                 | `Weight6`          | number as is                                                                       |
+| `weight_mode`             | (override table)   | `"manual"` if an override exists for `Name`, else `"auto"`                         |
+| `peak_bps`                | `Peak`             | `int64(math.Trunc(v))`                                                             |
+| `peak6_bps`               | `Peak6`            | same                                                                               |
+| `active_flows`            | `Active`           | as is                                                                              |
+| `total_flows`             | `Total`            | as is                                                                              |
+| `failed_flows`            | `Failed`           | as is                                                                              |
+| `link_in_bps`             | `LinkIn`           | truncated to integer                                                               |
+| `link_out_bps`            | `LinkOut`          | truncated to integer                                                               |
+| `relayed_in_bps`          | `RateIn`           | truncated to integer                                                               |
+| `relayed_out_bps`         | `RateOut`          | truncated to integer                                                               |
+| `bytes_in`                | `BytesIn`          | as is                                                                              |
+| `bytes_out`               | `BytesOut`         | as is                                                                              |
 
 Fields of `Snapshot` outside `adapters[]`: `totals.*` are sums of the above over `present == true`;
 `ipv6.detail` is `Balancer.V6State()`; `ipv6.mode` is `Balancer.V6Mode()` as `auto`/`on`/`off`;
@@ -1695,7 +1849,7 @@ Client to helper lines are marked `>`; helper to client lines `<`. Each line is 
 < {"id":4,"ok":true,"result":{"adapter":"en7","excluded":true}}
 > {"id":5,"cmd":"on"}
 < {"event":"state","seq":3,"data":{"ts":1760000001000,"state":"starting", ...}}
-< {"event":"state","seq":4,"data":{"ts":1760000001350,"state":"on","state_since":1760000001350, ... "autopause":{"enabled":true,"status":"held"},"tun":{"name":"utun5","open":true}}}
+< {"event":"state","seq":4,"data":{"ts":1760000001350,"state":"on","state_since":1760000001350, ... "autopause":{"enabled":true,"status":"held"},"ipv6":{"mode":"auto", ... },"tun":{"name":"utun5","open":true}}}
 < {"id":5,"ok":true,"result":{"state":"on"}}
 < {"event":"stats","seq":5,"data":{ ... "state":"on", ... }}
 > {"id":6,"cmd":"exclude","args":{"adapter":"en9"}}
@@ -1718,44 +1872,109 @@ A refused second client, while the session above is open:
 
 A connection from the wrong uid receives nothing and sees EOF.
 
+Notes on this transcript (informative):
+
+- Lines containing `...` are elided; only the parts shown are normative, in the order shown. Key order
+  is not significant (section 4.1).
+- Between `ts` 1760000001350 and the `quit` at 1760000020000 a real helper would send about 18 more
+  `stats` events at the subscribed 1000 ms interval; they are omitted for brevity. A test replay may
+  jump its clock without firing them.
+- `en7` is excluded before `on`, which leaves one usable adapter, so `autopause.status` is `held`
+  (section 10.1).
+
 ## Appendix C: TypeScript sketch
 
 Informative types for the client (`src/main/network/merge/netdClient.ts`); the tables above are normative.
 
 ```ts
-type Req = { id: number; cmd: Cmd; args?: object };
-type Cmd = 'hello' | 'status' | 'subscribe' | 'unsubscribe' | 'on' | 'off' | 'set_ipv6'
-  | 'set_autopause' | 'exclude' | 'include' | 'set_weight' | 'list_adapters' | 'cleanup' | 'quit';
-type Res = { id: number | null; ok: true; result: object }
-  | { id: number | null; ok: false; error: { code: ErrorCode; message: string; data?: object } };
-type Ev = { event: 'stats'; seq: number; data: Snapshot & { dropped: number } }
+type Req = { id: number; cmd: Cmd; args?: object }
+type Cmd =
+  | 'hello'
+  | 'status'
+  | 'subscribe'
+  | 'unsubscribe'
+  | 'on'
+  | 'off'
+  | 'set_ipv6'
+  | 'set_autopause'
+  | 'exclude'
+  | 'include'
+  | 'set_weight'
+  | 'list_adapters'
+  | 'cleanup'
+  | 'quit'
+type Res =
+  | { id: number | null; ok: true; result: object }
+  | { id: number | null; ok: false; error: { code: ErrorCode; message: string; data?: object } }
+type Ev =
+  | { event: 'stats'; seq: number; data: Snapshot & { dropped: number } }
   | { event: 'state'; seq: number; data: StateInfo }
   | { event: 'log'; seq: number; data: { level: string; message: string } }
-  | { event: string; seq: number; data: object };            // unknown events are ignored
-type MergeState = 'off' | 'starting' | 'on' | 'paused_auto' | 'error' | (string & {});
-type AutopauseStatus = 'disabled' | 'armed' | 'held' | 'waiting' | 'manual_off' | 'idle' | (string & {});
+  | { event: string; seq: number; data: object } // unknown events are ignored
+type MergeState = 'off' | 'starting' | 'on' | 'paused_auto' | 'error' | (string & {})
+type AutopauseStatus =
+  'disabled' | 'armed' | 'held' | 'waiting' | 'manual_off' | 'idle' | (string & {})
 interface StateInfo {
-  ts: number; state: MergeState; state_since: number; error: { message: string } | null;
-  capture: { available: boolean; error: string | null };
-  autopause: { enabled: boolean; status: AutopauseStatus };
-  ipv6: { mode: 'auto' | 'on' | 'off'; effective: 'balanced' | 'refused'; detail: string };
-  tun: { name: string | null; open: boolean };
+  ts: number
+  state: MergeState
+  state_since: number
+  error: { message: string } | null
+  capture: { available: boolean; error: string | null }
+  autopause: { enabled: boolean; status: AutopauseStatus }
+  ipv6: { mode: 'auto' | 'on' | 'off'; effective: 'balanced' | 'refused'; detail: string }
+  tun: { name: string | null; open: boolean }
 }
 interface Snapshot extends StateInfo {
-  totals: { link_in_bps: number; link_out_bps: number; relayed_in_bps: number; relayed_out_bps: number;
-            active_flows: number; adapters_present: number; adapters_usable: number };
-  adapters: Adapter[]; discovery_seq: number;
+  totals: {
+    link_in_bps: number
+    link_out_bps: number
+    relayed_in_bps: number
+    relayed_out_bps: number
+    active_flows: number
+    adapters_present: number
+    adapters_usable: number
+  }
+  adapters: Adapter[]
+  discovery_seq: number
 }
 interface Adapter {
-  name: string; ip: string | null; ip6: string | null; present: boolean; excluded: boolean;
-  state: LinkState; state6: LinkState; weight: number; weight6: number; weight_mode: 'auto' | 'manual';
-  peak_bps: number; peak6_bps: number; active_flows: number; total_flows: number; failed_flows: number;
-  link_in_bps: number; link_out_bps: number; relayed_in_bps: number; relayed_out_bps: number;
-  bytes_in: number; bytes_out: number;
+  name: string
+  ip: string | null
+  ip6: string | null
+  present: boolean
+  excluded: boolean
+  state: LinkState
+  state6: LinkState
+  weight: number
+  weight6: number
+  weight_mode: 'auto' | 'manual'
+  peak_bps: number
+  peak6_bps: number
+  active_flows: number
+  total_flows: number
+  failed_flows: number
+  link_in_bps: number
+  link_out_bps: number
+  relayed_in_bps: number
+  relayed_out_bps: number
+  bytes_in: number
+  bytes_out: number
 }
-type LinkState = 'none' | 'checking' | 'up' | 'down';
-type ErrorCode = 'bad_request' | 'frame_too_large' | 'too_many_requests' | 'unknown_command'
-  | 'unknown_field' | 'hello_required' | 'version_unsupported' | 'busy' | 'invalid_state'
-  | 'unknown_adapter' | 'out_of_range' | 'no_adapters' | 'unsupported_platform' | 'permission_denied'
-  | 'internal';
+type LinkState = 'none' | 'checking' | 'up' | 'down'
+type ErrorCode =
+  | 'bad_request'
+  | 'frame_too_large'
+  | 'too_many_requests'
+  | 'unknown_command'
+  | 'unknown_field'
+  | 'hello_required'
+  | 'version_unsupported'
+  | 'busy'
+  | 'invalid_state'
+  | 'unknown_adapter'
+  | 'out_of_range'
+  | 'no_adapters'
+  | 'unsupported_platform'
+  | 'permission_denied'
+  | 'internal'
 ```
