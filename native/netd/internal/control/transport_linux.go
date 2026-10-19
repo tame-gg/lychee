@@ -110,3 +110,10 @@ func unixPeerCheck(authUID int) func(net.Conn) (PeerInfo, error) {
 		return info, nil
 	}
 }
+
+func CheckPrivilege() (int, error) {
+	if !platform.IsAdmin() {
+		return ExitRefused, errors.New("the network helper needs root or CAP_NET_ADMIN")
+	}
+	return ExitOK, nil
+}

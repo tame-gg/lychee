@@ -44,6 +44,7 @@ type Slot struct {
 	probing               [2]atomic.Bool
 
 	weight          [2]float64
+	manual          [2]bool
 	present         bool
 	state           [2]linkState
 	lastProbe       [2]time.Time
@@ -226,7 +227,7 @@ func (s *Scheduler) Tick(dt time.Duration) {
 			continue
 		}
 		for _, sl := range s.slots {
-			if !sl.present || sl.ip(f) == nil {
+			if !sl.present || sl.ip(f) == nil || sl.manual[f] {
 				continue
 			}
 			if live < 2 || !measured {
@@ -340,6 +341,42 @@ func (s *Scheduler) Fail(sl *Slot, f Family, cooldown time.Duration) {
 	sl.downUntil[f] = s.now().Add(cooldown)
 	s.mu.Unlock()
 	sl.failed.Add(1)
+}
+
+func (s *Scheduler) SetWeightOverride(name string, w float64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sl := range s.slots {
+		if sl.key == name {
+			sl.weight = [2]float64{w, w}
+			sl.manual = [2]bool{true, true}
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Scheduler) ClearWeightOverride(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sl := range s.slots {
+		if sl.key == name {
+			sl.manual = [2]bool{false, false}
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Scheduler) HasSlot(name string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, sl := range s.slots {
+		if sl.key == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Scheduler) Snapshot() []SlotStats {

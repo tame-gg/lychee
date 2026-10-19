@@ -91,3 +91,10 @@ func darwinPeerCheck(authUID int) func(net.Conn) (PeerInfo, error) {
 		return info, nil
 	}
 }
+
+func CheckPrivilege() (int, error) {
+	if !platform.IsAdmin() {
+		return ExitRefused, errors.New("the network helper must run as root")
+	}
+	return ExitOK, nil
+}

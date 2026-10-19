@@ -74,6 +74,15 @@ func (t *Tun) IsOn() bool {
 	return t.on
 }
 
+func (t *Tun) Name() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.dev == nil {
+		return ""
+	}
+	return t.dev.Name()
+}
+
 var keepDevice bool
 
 func (t *Tun) open() error {

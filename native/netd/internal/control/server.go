@@ -103,6 +103,10 @@ type msgBatch struct {
 	frames [][]byte
 }
 type msgFrameTooLarge struct{ sess *session }
+type msgLog struct {
+	level string
+	msg   string
+}
 
 type Server struct {
 	cfg   Config
@@ -193,6 +197,13 @@ func (s *Server) Shutdown() {
 }
 
 func (s *Server) nowMs() int64 { return s.clock.Now().UnixMilli() }
+
+func (s *Server) Log(level, msg string) {
+	select {
+	case s.core <- msgLog{level: level, msg: msg}:
+	case <-s.done:
+	}
+}
 
 func (s *Server) logf(level, format string, args ...any) {
 	line := sprintfLine(format, args...)
@@ -384,6 +395,8 @@ func (s *Server) handleCoreMsg(m any) {
 		if v.sess == s.session {
 			s.closeWithError(nil, &apiError{code: errFrameTooLarge, message: "frame exceeds 65536 bytes"})
 		}
+	case msgLog:
+		s.emitLog(v.level, v.msg)
 	}
 }
 

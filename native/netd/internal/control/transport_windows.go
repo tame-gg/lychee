@@ -323,3 +323,7 @@ func pipePeerCheck(authSID *windows.SID) func(net.Conn) (PeerInfo, error) {
 		return info, nil
 	}
 }
+
+func CheckPrivilege() (int, error) {
+	return requireElevatedAdmin()
+}
