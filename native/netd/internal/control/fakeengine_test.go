@@ -4,13 +4,16 @@ import (
 	"sync"
 
 	"github.com/tame-gg/lychee/native/netd/internal/engine"
+	"github.com/tame-gg/lychee/native/netd/internal/nics"
 )
+
+var _ Engine = (*fakeEngine)(nil)
 
 type fakeEngine struct {
 	mu          sync.Mutex
 	slots       []engine.SlotStats
 	adapters    []AdapterInfo
-	skipped     []nics_Skip
+	skipped     []nics.Skip
 	discSeq     uint64
 	excluded    map[string]bool
 	overrides   map[string]float64
@@ -28,13 +31,6 @@ type fakeEngine struct {
 	cleanupCnt  int
 	setWeightRx []string
 	setExclRx   []string
-}
-
-type nics_Skip = skipLike
-
-type skipLike struct {
-	Name   string
-	Reason string
 }
 
 func newFakeEngine() *fakeEngine {
@@ -59,10 +55,10 @@ func (f *fakeEngine) Adapters() []AdapterInfo {
 	return append([]AdapterInfo(nil), f.adapters...)
 }
 
-func (f *fakeEngine) Skipped() []skipLike {
+func (f *fakeEngine) Skipped() []nics.Skip {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]skipLike(nil), f.skipped...)
+	return append([]nics.Skip(nil), f.skipped...)
 }
 
 func (f *fakeEngine) DiscoverySeq() uint64 {

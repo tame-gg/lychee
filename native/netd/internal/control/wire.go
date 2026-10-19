@@ -95,6 +95,27 @@ func newFrameReader(r io.Reader) *frameReader {
 
 var errLineTooLong = errors.New("frame too large")
 
+func (fr *frameReader) readBatch(max int) ([][]byte, error) {
+	first, err := fr.read()
+	if err != nil {
+		return nil, err
+	}
+	var batch [][]byte
+	if len(first) > 0 {
+		batch = append(batch, first)
+	}
+	for len(batch) < max && fr.r.Buffered() > 0 {
+		line, err := fr.read()
+		if err != nil {
+			return batch, err
+		}
+		if len(line) > 0 {
+			batch = append(batch, line)
+		}
+	}
+	return batch, nil
+}
+
 func (fr *frameReader) read() ([]byte, error) {
 	var buf []byte
 	for {

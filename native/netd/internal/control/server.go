@@ -64,7 +64,6 @@ type session struct {
 
 	out      chan outFrame
 	wnote    chan noteKind
-	intake   chan []byte
 	readOnce sync.Once
 
 	seq           uint64
@@ -77,6 +76,7 @@ type session struct {
 	logWindowStart time.Time
 	logCount       int
 
+	closing      bool
 	lastStateSig string
 }
 
@@ -97,10 +97,11 @@ type claimResult struct {
 }
 
 type msgReadEnd struct{ sess *session }
-type msgOverflow struct {
-	sess *session
-	line []byte
+type msgBatch struct {
+	sess   *session
+	frames [][]byte
 }
+type msgFrameTooLarge struct{ sess *session }
 
 type Server struct {
 	cfg   Config
@@ -240,7 +241,16 @@ func (s *Server) handleConn(nc net.Conn) {
 		err  error
 	}
 	ch := make(chan rd, 1)
-	go func() { line, e := fr.read(); ch <- rd{line, e} }()
+	go func() {
+		for {
+			line, e := fr.read()
+			if e == nil && len(line) == 0 {
+				continue
+			}
+			ch <- rd{line, e}
+			return
+		}
+	}()
 	var first rd
 	select {
 	case first = <-ch:
@@ -250,6 +260,9 @@ func (s *Server) handleConn(nc net.Conn) {
 		return
 	}
 	if first.err != nil {
+		if first.err == errLineTooLong {
+			writeRaw(nc, errResponse(nil, &apiError{code: errFrameTooLarge, message: "frame exceeds 65536 bytes"}))
+		}
 		nc.Close()
 		return
 	}
@@ -299,10 +312,8 @@ func (s *Server) runLoop() {
 		if s.stopped {
 			return
 		}
-		var intake chan []byte
 		var wnote chan noteKind
 		if s.session != nil {
-			intake = s.session.intake
 			wnote = s.session.wnote
 		}
 		select {
@@ -328,10 +339,6 @@ func (s *Server) runLoop() {
 			s.onStall()
 		case m := <-s.core:
 			s.handleCoreMsg(m)
-		case line, ok := <-intake:
-			if ok {
-				s.onFrame(line)
-			}
 		case n := <-wnote:
 			s.onWnote(n)
 		}
@@ -349,9 +356,13 @@ func (s *Server) handleCoreMsg(m any) {
 			s.logf("info", "client disconnected, waiting 10 s")
 			s.dropSession()
 		}
-	case msgOverflow:
+	case msgBatch:
 		if v.sess == s.session {
-			s.onOverflow(v.line)
+			s.onBatch(v.frames)
+		}
+	case msgFrameTooLarge:
+		if v.sess == s.session {
+			s.closeWithError(nil, &apiError{code: errFrameTooLarge, message: "frame exceeds 65536 bytes"})
 		}
 	}
 }
@@ -372,7 +383,6 @@ func (s *Server) onClaim(m msgClaim) {
 		proto:    m.proto,
 		out:      make(chan outFrame, OutboundQueue),
 		wnote:    make(chan noteKind, 256),
-		intake:   make(chan []byte, MaxInFlight),
 		interval: StatsIntervalDef,
 	}
 	s.session = sess
@@ -402,6 +412,17 @@ func (s *Server) dropSession() {
 	}
 }
 
+func (s *Server) closeWithError(id *int64, e *apiError) {
+	if s.session == nil {
+		return
+	}
+	s.enqueue(outFrame{errResponse(id, e), kindResp})
+	s.session.closing = true
+	if s.session.pendingWrites == 0 {
+		s.dropSession()
+	}
+}
+
 func (s *Server) onStall() {
 	s.stallCh = nil
 	if s.session != nil {
@@ -412,15 +433,16 @@ func (s *Server) onStall() {
 
 func (s *Server) reader(sess *session) {
 	for {
-		line, err := sess.fr.read()
-		if err != nil {
-			sess.readOnce.Do(func() { s.sendCore(msgReadEnd{sess}) })
-			return
+		batch, err := sess.fr.readBatch(MaxInFlight + 1)
+		if len(batch) > 0 {
+			s.sendCore(msgBatch{sess, batch})
 		}
-		select {
-		case sess.intake <- line:
-		default:
-			s.sendCore(msgOverflow{sess, line})
+		if err != nil {
+			if err == errLineTooLong {
+				s.sendCore(msgFrameTooLarge{sess})
+				return
+			}
+			sess.readOnce.Do(func() { s.sendCore(msgReadEnd{sess}) })
 			return
 		}
 	}
@@ -456,6 +478,10 @@ func (s *Server) onWnote(kind noteKind) {
 	}
 	if s.pendingQuit && s.session.pendingWrites == 0 {
 		s.doShutdown(0)
+		return
+	}
+	if s.session.closing && s.session.pendingWrites == 0 {
+		s.dropSession()
 	}
 }
 

@@ -9,69 +9,49 @@ import (
 	"github.com/tame-gg/lychee/native/netd/internal/engine"
 )
 
-func (s *Server) onFrame(first []byte) {
+func (s *Server) onBatch(frames [][]byte) {
 	seen := map[int64]bool{}
-	if !s.handleFrame(first, seen) {
-		return
-	}
-	for s.session != nil {
-		select {
-		case line, ok := <-s.session.intake:
-			if !ok {
-				return
-			}
-			if !s.handleFrame(line, seen) {
-				return
-			}
-		default:
+	for i, line := range frames {
+		if s.session == nil || s.session.closing {
+			return
+		}
+		if i >= MaxInFlight {
+			s.closeWithError(decodeIDBestEffort(line), &apiError{code: errTooManyRequests, message: "more than 16 requests in flight"})
+			return
+		}
+		if !s.handleFrame(line, seen) {
 			return
 		}
 	}
 }
 
+func decodeIDBestEffort(line []byte) *int64 {
+	req, aerr := decodeEnvelope(line)
+	if aerr == nil {
+		return req.id
+	}
+	return aerr.id
+}
+
 func (s *Server) handleFrame(line []byte, seen map[int64]bool) bool {
+	if s.session == nil || s.session.closing {
+		return false
+	}
 	req, aerr := decodeEnvelope(line)
 	if aerr != nil {
-		s.respondErr(aerr.id, aerr)
 		if aerr.closes {
-			s.dropSession()
+			s.closeWithError(aerr.id, aerr)
 			return false
 		}
+		s.respondErr(aerr.id, aerr)
 		return true
 	}
 	if seen[*req.id] {
-		s.respondErr(req.id, &apiError{code: errBadRequest, message: "id reused while still unanswered"})
-		s.dropSession()
+		s.closeWithError(req.id, &apiError{code: errBadRequest, message: "id reused while still unanswered"})
 		return false
 	}
 	seen[*req.id] = true
 	return !s.dispatch(req)
-}
-
-func (s *Server) onOverflow(line []byte) {
-	for s.session != nil {
-		select {
-		case l, ok := <-s.session.intake:
-			if !ok {
-				break
-			}
-			s.handleFrame(l, map[int64]bool{})
-		default:
-			goto emit
-		}
-	}
-emit:
-	if s.session == nil {
-		return
-	}
-	var id *int64
-	if req, aerr := decodeEnvelope(line); aerr == nil {
-		id = req.id
-	} else {
-		id = aerr.id
-	}
-	s.respondErr(id, &apiError{code: errTooManyRequests, message: "more than 16 requests in flight"})
-	s.dropSession()
 }
 
 func (s *Server) respondOK(id *int64, result any) {
