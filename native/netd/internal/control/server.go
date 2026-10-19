@@ -81,6 +81,7 @@ type session struct {
 }
 
 type msgConnArrived struct{}
+type msgConnGone struct{}
 
 type msgClaim struct {
 	nc    net.Conn
@@ -134,6 +135,8 @@ type Server struct {
 
 	pendingQuit bool
 	stopped     bool
+	graceActive bool
+	preHello    int
 
 	shutOnce sync.Once
 	exitCode int
@@ -228,12 +231,17 @@ func (s *Server) handleConn(nc net.Conn) {
 
 	peer, err := s.cfg.PeerCheck(nc)
 	if err != nil {
-		s.sendCore(msgConnArrived{})
 		s.logf("info", "peer rejected: %v", err)
 		nc.Close()
 		return
 	}
 	s.sendCore(msgConnArrived{})
+	claimed := false
+	defer func() {
+		if !claimed {
+			s.sendCore(msgConnGone{})
+		}
+	}()
 
 	fr := newFrameReader(nc)
 	type rd struct {
@@ -297,6 +305,7 @@ func (s *Server) handleConn(nc net.Conn) {
 		nc.Close()
 		return
 	}
+	claimed = true
 	release()
 }
 
@@ -348,7 +357,18 @@ func (s *Server) runLoop() {
 func (s *Server) handleCoreMsg(m any) {
 	switch v := m.(type) {
 	case msgConnArrived:
+		s.preHello++
 		s.startupCh = nil
+		if s.graceActive {
+			s.graceCh = nil
+		}
+	case msgConnGone:
+		if s.preHello > 0 {
+			s.preHello--
+		}
+		if s.graceActive && s.session == nil && s.preHello == 0 {
+			s.graceCh = s.clock.After(GracePeriod)
+		}
 	case msgClaim:
 		s.onClaim(v)
 	case msgReadEnd:
@@ -387,7 +407,11 @@ func (s *Server) onClaim(m msgClaim) {
 	}
 	s.session = sess
 	s.sessionNum++
+	if s.preHello > 0 {
+		s.preHello--
+	}
 	s.startupCh = nil
+	s.graceActive = false
 	s.graceCh = nil
 	go s.writer(sess)
 	go s.reader(sess)
@@ -408,7 +432,10 @@ func (s *Server) dropSession() {
 	s.statsCh = nil
 	s.stallCh = nil
 	if !s.quitting {
-		s.graceCh = s.clock.After(GracePeriod)
+		s.graceActive = true
+		if s.preHello == 0 {
+			s.graceCh = s.clock.After(GracePeriod)
+		}
 	}
 }
 

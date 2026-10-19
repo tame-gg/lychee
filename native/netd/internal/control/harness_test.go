@@ -12,11 +12,12 @@ import (
 )
 
 type harness struct {
-	t    *testing.T
-	srv  *Server
-	clk  *fakeClock
-	eng  *fakeEngine
-	addr string
+	t      *testing.T
+	srv    *Server
+	clk    *fakeClock
+	eng    *fakeEngine
+	addr   string
+	exited chan int
 }
 
 func startHarness(t *testing.T, tweak func(*Config, *fakeEngine)) *harness {
@@ -50,9 +51,21 @@ func startHarness(t *testing.T, tweak func(*Config, *fakeEngine)) *harness {
 		tweak(&cfg, eng)
 	}
 	srv := New(cfg)
-	go srv.Serve()
+	exited := make(chan int, 1)
+	go func() { exited <- srv.Serve() }()
 	t.Cleanup(func() { srv.Shutdown() })
-	return &harness{t: t, srv: srv, clk: clk, eng: eng, addr: sock}
+	return &harness{t: t, srv: srv, clk: clk, eng: eng, addr: sock, exited: exited}
+}
+
+func (h *harness) settle() { time.Sleep(40 * time.Millisecond) }
+
+func (h *harness) waitExit() {
+	h.t.Helper()
+	select {
+	case <-h.exited:
+	case <-time.After(3 * time.Second):
+		h.t.Fatal("server did not exit")
+	}
 }
 
 type client struct {
