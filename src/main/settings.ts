@@ -96,6 +96,7 @@ function sanitizeSettings(parsed: unknown): AppSettings {
   if (parsed.browserExtensionUsed === true) settings.browserExtensionUsed = true
   if (parsed.sidebarCollapsed === true) settings.sidebarCollapsed = true
   if (parsed.merge !== undefined) settings.merge = sanitizeMergeSettings(parsed.merge)
+  if (parsed.showNetworkPage === true) settings.showNetworkPage = true
   return settings
 }
 

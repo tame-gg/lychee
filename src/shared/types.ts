@@ -356,6 +356,8 @@ export interface AppSettings {
   browserExtensionUsed?: boolean
   sidebarCollapsed?: boolean
   merge?: MergeSettings
+  /** Only ever saved as true, by hand: shows the Network page, wired to the real helper. */
+  showNetworkPage?: boolean
 }
 
 /** How big the window's content is drawn. Auto shrinks it a little on a highly scaled display
@@ -390,7 +392,12 @@ export interface InitialState {
   /** The last folder picked, if it still exists — otherwise the renderer uses downloadsDir. */
   destinationDir?: string
   merge: MergeSettings
+  networkPage: NetworkPageMode
 }
+
+/** Whether the sidebar offers the Network page, and what drives it: the real helper through
+ * window.lychee, or a simulation in the renderer (for working on the page without a helper). */
+export type NetworkPageMode = 'off' | 'helper' | 'mock' | `mock:${MergeStatus}`
 
 interface StartDownloadRequestBase {
   url: string
