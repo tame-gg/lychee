@@ -31,6 +31,7 @@ type fakeEngine struct {
 	cleanupCnt  int
 	setWeightRx []string
 	setExclRx   []string
+	offHook     func()
 }
 
 func newFakeEngine() *fakeEngine {
@@ -101,6 +102,9 @@ func (f *fakeEngine) Off() error {
 	defer f.mu.Unlock()
 	f.offCalls++
 	f.on = false
+	if f.offHook != nil {
+		f.offHook()
+	}
 	return f.offErr
 }
 

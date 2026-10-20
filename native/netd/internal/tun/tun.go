@@ -19,6 +19,7 @@ import (
 	"github.com/xjasonlyu/tun2socks/v2/tunnel"
 
 	"github.com/tame-gg/lychee/native/netd/internal/engine"
+	"github.com/tame-gg/lychee/native/netd/internal/logx"
 )
 
 const (
@@ -120,15 +121,23 @@ func (t *Tun) Warm() error {
 	return t.open()
 }
 
-func (t *Tun) On() (err error) {
+func (t *Tun) On() error {
 	t.mu.Lock()
-	defer t.mu.Unlock()
+	notes, err := t.turnOn()
+	t.mu.Unlock()
+	for _, n := range notes {
+		logx.Printf("%s\n", n)
+	}
+	return err
+}
+
+func (t *Tun) turnOn() (notes []string, err error) {
 	if t.on {
-		return nil
+		return nil, nil
 	}
 	if t.dev == nil {
 		if err = t.open(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	defer func() {
@@ -138,11 +147,12 @@ func (t *Tun) On() (err error) {
 	}()
 	tunnel.T().SetProxy(tunProxy{t.B})
 
-	if t.idx, err = configure(t.dev.Name(), t.MTU); err != nil {
-		return err
+	t.idx, notes, err = configure(t.dev.Name(), t.MTU)
+	if err != nil {
+		return notes, err
 	}
 	t.on = true
-	return nil
+	return notes, nil
 }
 
 func (t *Tun) Off() {

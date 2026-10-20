@@ -6,40 +6,39 @@ import (
 
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
-
-	"github.com/tame-gg/lychee/native/netd/internal/logx"
 )
 
 const openHint = "needs root or CAP_NET_ADMIN, and /dev/net/tun"
 
-func configure(name string, _ int) (int, error) {
+func configure(name string, _ int) (int, []string, error) {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
-		return 0, fmt.Errorf("adapter %q did not appear: %w", name, err)
+		return 0, nil, fmt.Errorf("adapter %q did not appear: %w", name, err)
 	}
 	idx := link.Attrs().Index
 	if err := netlink.AddrReplace(link, &netlink.Addr{IPNet: hostCIDR(tunIP + "/24")}); err != nil {
-		return idx, fmt.Errorf("set address: %w", err)
+		return idx, nil, fmt.Errorf("set address: %w", err)
 	}
 	if err := netlink.LinkSetUp(link); err != nil {
-		return idx, fmt.Errorf("bring up: %w", err)
+		return idx, nil, fmt.Errorf("bring up: %w", err)
 	}
 	for _, dst := range routes4 {
 		if err := netlink.RouteReplace(tunRoute(idx, dst)); err != nil {
-			return idx, fmt.Errorf("route %s: %w", dst, err)
+			return idx, nil, fmt.Errorf("route %s: %w", dst, err)
 		}
 	}
 
+	var notes []string
 	if err := netlink.AddrReplace(link, &netlink.Addr{IPNet: hostCIDR(tunIP6 + "/64"), Flags: unix.IFA_F_NODAD}); err != nil {
-		logx.Printf("warning: IPv6 not captured: %v\n", err)
+		notes = append(notes, fmt.Sprintf("warning: IPv6 not captured: %v", err))
 	} else {
 		for _, dst := range routes6 {
 			if err := netlink.RouteReplace(tunRoute(idx, dst)); err != nil {
-				logx.Printf("warning: IPv6 route %s: %v\n", dst, err)
+				notes = append(notes, fmt.Sprintf("warning: IPv6 route %s: %v", dst, err))
 			}
 		}
 	}
-	return idx, nil
+	return idx, notes, nil
 }
 
 func delRoutes(idx int) {

@@ -7,6 +7,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -142,8 +143,9 @@ type Server struct {
 	graceActive bool
 	preHello    int
 
-	shutOnce sync.Once
-	exitCode int
+	shutOnce   sync.Once
+	exitCode   int
+	logDropped atomic.Uint64
 }
 
 func New(cfg Config) *Server {
@@ -201,7 +203,8 @@ func (s *Server) nowMs() int64 { return s.clock.Now().UnixMilli() }
 func (s *Server) Log(level, msg string) {
 	select {
 	case s.core <- msgLog{level: level, msg: msg}:
-	case <-s.done:
+	default:
+		s.logDropped.Add(1)
 	}
 }
 
@@ -420,6 +423,7 @@ func (s *Server) onClaim(m msgClaim) {
 	}
 	s.session = sess
 	s.sessionNum++
+	s.logDropped.Store(0)
 	if s.preHello > 0 {
 		s.preHello--
 	}
@@ -595,6 +599,7 @@ func (s *Server) emitLog(level, msg string) {
 	if s.session == nil {
 		return
 	}
+	s.session.dropped += s.logDropped.Swap(0)
 	now := s.clock.Now()
 	if now.Sub(s.session.logWindowStart) >= time.Second {
 		s.session.logWindowStart = now

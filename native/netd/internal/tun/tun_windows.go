@@ -32,19 +32,19 @@ func init() {
 	}
 }
 
-func configure(name string, mtu int) (int, error) {
+func configure(name string, mtu int) (int, []string, error) {
 	if err := run("netsh", "interface", "ipv4", "set", "address", "name="+name, "source=static",
 		"address="+tunIP, "mask="+tunMask, "store=active"); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	ifc, err := waitIface(name, 5*time.Second)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	for try := 1; !hasAddr(ifc, tunIP); try++ {
 		if try > 20 {
-			return ifc.Index, fmt.Errorf("adapter %q did not keep its address %s", name, tunIP)
+			return ifc.Index, nil, fmt.Errorf("adapter %q did not keep its address %s", name, tunIP)
 		}
 		if try%4 == 0 {
 			run("netsh", "interface", "ipv4", "set", "address", "name="+name, "source=static",
@@ -53,32 +53,32 @@ func configure(name string, mtu int) (int, error) {
 		time.Sleep(250 * time.Millisecond)
 	}
 
-	startStrongHost(ifc.Index)
+	notes := startStrongHost(ifc.Index)
 
 	idx := strconv.Itoa(ifc.Index)
 	mtuArg := "mtu=" + strconv.Itoa(mtu)
 	if e := run("netsh", "interface", "ipv4", "set", "subinterface", "interface="+idx, mtuArg, "store=active"); e != nil {
-		logx.Printf("warning: could not set IPv4 MTU: %v\n", e)
+		notes = append(notes, fmt.Sprintf("warning: could not set IPv4 MTU: %v", e))
 	}
 	for _, dst := range routes4win {
 		if err = run("route", "add", dst[0], "mask", dst[1], "0.0.0.0", "metric", "1", "if", idx); err != nil {
-			return ifc.Index, err
+			return ifc.Index, notes, err
 		}
 	}
 
 	if e := run("netsh", "interface", "ipv6", "add", "address", "interface="+idx, "address="+tunIP6+"/64", "store=active"); e != nil {
-		logx.Printf("warning: IPv6 not captured: %v\n", e)
+		notes = append(notes, fmt.Sprintf("warning: IPv6 not captured: %v", e))
 	} else {
 		if e := run("netsh", "interface", "ipv6", "set", "subinterface", "interface="+idx, mtuArg, "store=active"); e != nil {
-			logx.Printf("warning: could not set IPv6 MTU: %v\n", e)
+			notes = append(notes, fmt.Sprintf("warning: could not set IPv6 MTU: %v", e))
 		}
 		for _, p := range routes6 {
 			if e := run("netsh", "interface", "ipv6", "add", "route", "prefix="+p, "interface="+idx, "metric=1", "store=active"); e != nil {
-				logx.Printf("warning: IPv6 route %s: %v\n", p, e)
+				notes = append(notes, fmt.Sprintf("warning: IPv6 route %s: %v", p, e))
 			}
 		}
 	}
-	return ifc.Index, nil
+	return ifc.Index, notes, nil
 }
 
 func delRoutes(idx int) {
@@ -134,12 +134,12 @@ var strongHost struct {
 
 var strongHostFile = filepath.Join(os.TempDir(), "lychee-netd-weakhost.txt")
 
-func startStrongHost(tunIdx int) {
+func startStrongHost(tunIdx int) []string {
 	stop := make(chan struct{})
 	strongHost.mu.Lock()
 	strongHost.checked, strongHost.restore, strongHost.stop = map[int]bool{tunIdx: true}, nil, stop
 	strongHost.mu.Unlock()
-	syncStrongHost(stop)
+	notes := syncStrongHost(stop)
 	go func() {
 		t := time.NewTicker(5 * time.Second)
 		defer t.Stop()
@@ -148,18 +148,21 @@ func startStrongHost(tunIdx int) {
 			case <-stop:
 				return
 			case <-t.C:
-				syncStrongHost(stop)
+				for _, n := range syncStrongHost(stop) {
+					logx.Printf("%s\n", n)
+				}
 			}
 		}
 	}()
+	return notes
 }
 
-func syncStrongHost(stop chan struct{}) {
+func syncStrongHost(stop chan struct{}) []string {
 	found, _ := nics.DiscoverNics(nil, nil)
 	strongHost.mu.Lock()
 	defer strongHost.mu.Unlock()
 	if strongHost.stop != stop {
-		return
+		return nil
 	}
 	var idx []string
 	for _, n := range found {
@@ -169,7 +172,7 @@ func syncStrongHost(stop chan struct{}) {
 		}
 	}
 	if len(idx) == 0 {
-		return
+		return nil
 	}
 
 	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
@@ -177,9 +180,9 @@ func syncStrongHost(stop chan struct{}) {
 			"Where-Object { $_.WeakHostSend -eq 'Enabled' -or $_.Forwarding -eq 'Enabled' } | "+
 			"ForEach-Object { '{0} {1} {2} {3}' -f $_.AddressFamily, $_.InterfaceIndex, $_.WeakHostSend, $_.Forwarding }").Output()
 	if err != nil {
-		logx.Printf("warning: could not check the adapters' weak host setting: %v\n", err)
-		return
+		return []string{fmt.Sprintf("warning: could not check the adapters' weak host setting: %v", err)}
 	}
+	var notes []string
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		f := strings.Fields(line)
 		if len(f) != 4 {
@@ -191,15 +194,16 @@ func syncStrongHost(stop chan struct{}) {
 		}
 		if err := run("netsh", "interface", fam, "set", "interface", "interface="+f[1],
 			"weakhostsend=disabled", "forwarding=disabled", "store=active"); err != nil {
-			logx.Printf("warning: %v\n", err)
+			notes = append(notes, fmt.Sprintf("warning: %v", err))
 			continue
 		}
 		strongHost.restore = append(strongHost.restore, fmt.Sprintf("%s %s weakhostsend=%s forwarding=%s",
 			fam, f[1], strings.ToLower(f[2]), strings.ToLower(f[3])))
-		logx.Printf("note: turned off weak host send and forwarding on adapter %s (%s) while merging; "+
-			"Windows ignores pinned connections there. Sharing its connection (Mobile Hotspot) pauses until merging is off.\n", f[1], f[0])
+		notes = append(notes, fmt.Sprintf("note: turned off weak host send and forwarding on adapter %s (%s) while merging; "+
+			"Windows ignores pinned connections there. Sharing its connection (Mobile Hotspot) pauses until merging is off.", f[1], f[0]))
 	}
 	os.WriteFile(strongHostFile, []byte(strings.Join(strongHost.restore, "\n")), 0o600)
+	return notes
 }
 
 func stopStrongHost() {

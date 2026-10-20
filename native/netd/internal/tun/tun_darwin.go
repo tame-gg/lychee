@@ -21,34 +21,34 @@ func init() {
 	keepDevice = true
 }
 
-func configure(name string, _ int) (int, error) {
+func configure(name string, _ int) (int, []string, error) {
 	ifc, err := net.InterfaceByName(name)
 	if err != nil {
-		return 0, fmt.Errorf("adapter %q did not appear: %w", name, err)
+		return 0, nil, fmt.Errorf("adapter %q did not appear: %w", name, err)
 	}
 
 	if err := startScopedSync(); err != nil {
-		return ifc.Index, err
+		return ifc.Index, nil, err
 	}
 	if err := run("/sbin/ifconfig", name, "inet", tunIP, tunIP, "up"); err != nil {
-		return ifc.Index, err
+		return ifc.Index, nil, err
 	}
 	for _, dst := range routes4 {
 		if err := run("/sbin/route", "-q", "-n", "add", "-inet", dst, "-interface", name); err != nil {
-			return ifc.Index, err
+			return ifc.Index, nil, err
 		}
 	}
 
 	if err := run("/sbin/ifconfig", name, "inet6", tunIP6, "prefixlen", "64", "alias"); err != nil {
-		logx.Printf("warning: IPv6 not captured: %v\n", err)
-		return ifc.Index, nil
+		return ifc.Index, []string{fmt.Sprintf("warning: IPv6 not captured: %v", err)}, nil
 	}
+	var notes []string
 	for _, dst := range routes6 {
 		if err := run("/sbin/route", "-q", "-n", "add", "-inet6", dst, "-interface", name); err != nil {
-			logx.Printf("warning: IPv6 route %s: %v\n", dst, err)
+			notes = append(notes, fmt.Sprintf("warning: IPv6 route %s: %v", dst, err))
 		}
 	}
-	return ifc.Index, nil
+	return ifc.Index, notes, nil
 }
 
 func delRoutes(idx int) {
