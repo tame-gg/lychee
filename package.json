@@ -26,7 +26,7 @@
     "start": "electron-vite preview",
     "predev": "install-electron",
     "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "build": "npm run typecheck && npm run build:netd -- --host && electron-vite build",
     "postinstall": "patch-package && install-electron && electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
@@ -36,6 +36,7 @@
     "test:e2e": "playwright test",
     "test:e2e:smoke": "playwright test --grep @smoke",
     "build:netd": "node scripts/build-netd.mjs",
+    "test:unit": "node --test scripts/*.test.mts",
     "test:netd": "cd native/netd && go vet ./... && go test ./..."
   },
   "dependencies": {

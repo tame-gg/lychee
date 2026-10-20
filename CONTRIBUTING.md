@@ -11,7 +11,7 @@ npm install
 npm run dev
 ```
 
-Requires Node.js 22.12+ and npm 9+, on Windows, macOS, or Linux.
+Requires Node.js 22.12+ and npm 9+, on Windows, macOS, or Linux. Packaging (`npm run build` and every `build:*` script) also needs Go 1.27+ for the network helper, `lychee-netd` (`native/netd`, built by `npm run build:netd`); `go.mod` pins the exact toolchain, which Go fetches on its own. The helper's Go tests (`npm run test:netd`) on macOS need the loopback aliases `sudo ifconfig lo0 alias 127.0.0.2/32` and `127.0.0.3/32`.
 
 ## Packaging
 
@@ -27,6 +27,7 @@ Local builds are unsigned, except on macOS, where they are ad-hoc signed.
 npm run lint
 npm run typecheck
 npm run format
+npm run test:unit
 npm run test:e2e:smoke
 ```
 
