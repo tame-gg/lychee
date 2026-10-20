@@ -5,8 +5,8 @@ import type { MergeState } from '../src/shared/types'
 import { test, expect } from './fixtures'
 import { test as netdTest } from './netd/harness'
 
-// The Network page (plan step L-6): hidden unless asked for, and when shown, wired either to the
-// helper (here the fake netd) or to the renderer's own simulation.
+// The Network page (plan step L-6): shown unless turned off, and wired either to the helper (here
+// the fake netd) or to the renderer's own simulation.
 
 const { version } = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as {
   version: string
@@ -25,11 +25,10 @@ async function openNetworkPage(page: Page): Promise<void> {
 const statusWord = (page: Page): ReturnType<Page['getByRole']> =>
   page.getByRole('status', { name: 'Combining status' })
 
-test('the Network page is hidden by default, and merging stays off', async ({ lychee }) => {
+test('the Network page is shown by default, and merging stays off', async ({ lychee }) => {
   const page = lychee.page
-  await expect(page.getByRole('navigation', { name: 'Download categories' })).toBeVisible()
-  await expect(sidebarItem(page)).toHaveCount(0)
-  expect(await page.evaluate(() => window.lychee.initialState.networkPage)).toBe('off')
+  await expect(sidebarItem(page)).toBeVisible()
+  expect(await page.evaluate(() => window.lychee.initialState.networkPage)).toBe('helper')
   const state = (await lychee.api.mergeState()) as MergeState
   expect(state).toMatchObject({ status: 'off', settings: { enabled: false } })
 })
@@ -78,12 +77,40 @@ helperTest(
   }
 )
 
+helperTest(
+  'a change the helper refuses goes back, and the page says why',
+  async ({ lychee, netd }) => {
+    await netd.start({ helperVersion: version })
+    const page = lychee.page
+    await openNetworkPage(page)
+    await page.getByRole('switch', { name: 'Combine connections' }).click()
+    await expect(statusWord(page)).toHaveText('Merging')
+    const checkbox = page
+      .getByRole('table', { name: 'Connections' })
+      .getByRole('checkbox', { name: 'Combine en7' })
+    await expect(checkbox).toBeChecked()
+
+    await lychee.evaluateMain(({ ipcMain }) => {
+      ipcMain.removeHandler('merge:set-network')
+      ipcMain.handle('merge:set-network', () => {
+        throw new Error('the helper refused')
+      })
+    }, null)
+    await checkbox.click()
+    await expect(page.getByRole('alert')).toHaveText('the helper refused')
+    await expect(checkbox).toBeChecked()
+    const state = (await lychee.api.mergeState()) as MergeState
+    expect(state.settings.excluded).toEqual([])
+  }
+)
+
 test.describe('with the simulated helper', () => {
   test.use({ appEnv: { LYCHEE_NETWORK_PAGE: 'mock' } })
 
   test('renders its connections and never reaches the real controller', async ({ lychee }) => {
     const page = lychee.page
     await openNetworkPage(page)
+    await expect(page.getByRole('button', { name: 'Repair network settings' })).toBeEnabled()
     await page.getByRole('switch', { name: 'Combine connections' }).click()
     await expect(statusWord(page)).toHaveText('Merging')
     const table = page.getByRole('table', { name: 'Connections' })
