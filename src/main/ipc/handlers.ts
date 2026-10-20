@@ -181,7 +181,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
         sidebarCollapsed: settings.sidebarCollapsed ?? false,
         destinationDir: destinationExists ? destinationDir : undefined,
         merge: settings.merge ?? DEFAULT_MERGE_SETTINGS,
-        networkPage: testKnobs.networkPage ?? (settings.showNetworkPage ? 'helper' : 'off')
+        networkPage:
+          testKnobs.networkPage ?? (settings.showNetworkPage === false ? 'off' : 'helper')
       } satisfies InitialState
     } catch (error) {
       console.error('[lychee] failed to read initial state', error)
@@ -198,7 +199,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
         interfaceSize: 'auto',
         sidebarCollapsed: false,
         merge: DEFAULT_MERGE_SETTINGS,
-        networkPage: testKnobs.networkPage ?? 'off'
+        networkPage: testKnobs.networkPage ?? 'helper'
       } satisfies InitialState
     }
   })
