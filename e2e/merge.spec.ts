@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { mergeTests } from '@playwright/test'
-import type { MergeState } from '../src/shared/types'
+import type { MergeState, NetworkInterfaceInfo } from '../src/shared/types'
 import { test as appTest, expect } from './fixtures'
 import { test as netdTest } from './netd/harness'
 
@@ -117,3 +117,38 @@ test('a helper that vanishes is reported as stopped, with the history kept', asy
   expect(state.history.down.en0).toHaveLength(2)
   expect(state.settings.enabled).toBe(true)
 })
+
+const tunTest = test.extend({
+  appEnv: async ({ netd }, use) => {
+    await use({
+      LYCHEE_E2E_NETD: netd.path,
+      LYCHEE_E2E_INTERFACES:
+        'wifi=192.0.2.2,utun5=192.0.2.9,lychee-netd=198.18.0.1,tun9=fd6e:6d65:7267::1'
+    })
+  }
+})
+
+tunTest(
+  "the helper's TUN adapter is never one of the networks: by its name, its addresses, or the name the helper reports",
+  async ({ lychee, netd }) => {
+    await netd.start({ helperVersion: version, capabilities: ['link_counters'] })
+    const ids = async (): Promise<string[]> =>
+      ((await lychee.api.listInterfaces()) as NetworkInterfaceInfo[]).map((iface) => iface.id)
+    expect(await ids()).toEqual(['wifi', 'utun5'])
+
+    await lychee.api.setMerging(true)
+    await expect.poll(async () => ((await lychee.api.mergeState()) as MergeState).status).toBe('on')
+    expect(((await lychee.api.mergeState()) as MergeState).tun).toEqual({
+      name: 'utun5',
+      open: true
+    })
+    await expect.poll(ids).toEqual(['wifi'])
+
+    await lychee.api.setMerging(false)
+    await expect
+      .poll(async () => ((await lychee.api.mergeState()) as MergeState).status)
+      .toBe('off')
+    expect(((await lychee.api.mergeState()) as MergeState).tun).toEqual({ name: null, open: false })
+    await expect.poll(ids).toEqual(['wifi', 'utun5'])
+  }
+)

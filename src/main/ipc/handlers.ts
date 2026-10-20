@@ -27,7 +27,7 @@ import { deviceBindingSupported } from '../network/deviceBinding'
 import { connectOnlyLauncher, NativeLauncher } from '../network/merge/elevate'
 import { MergeController } from '../network/merge/mergeController'
 import { pendingLink, pendingLinks, releaseLink } from '../openLinks'
-import { NetworkMonitor } from '../network/interfaces'
+import { NetworkMonitor, setReportedTunName } from '../network/interfaces'
 import { loadSettings, saveSettings } from '../settings'
 import { testKnobs } from '../testKnobs'
 import { showUpdateMenu, updateState } from '../updater'
@@ -88,6 +88,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
     if (window && !window.isDestroyed()) window.webContents.send(IpcChannels.networksChanged, list)
   })
   const manager = new DownloadManager(getWindow, networks)
+  let reportedTunName: string | null = null
   const merge = new MergeController({
     launcher: testKnobs.netdControlPath
       ? connectOnlyLauncher(testKnobs.netdControlPath)
@@ -109,6 +110,14 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
       save: (settings) => saveSettings({ merge: settings })
     },
     push: (state) => {
+      // The helper's TUN adapter is never one of Lychee's networks (plan L-5): hidden by the name
+      // the helper reports for it, as soon as it reports one.
+      const tunName = state.tun?.open ? state.tun.name : null
+      if (tunName !== reportedTunName) {
+        reportedTunName = tunName
+        setReportedTunName(tunName)
+        void networks.refresh()
+      }
       const window = getWindow()
       if (window && !window.isDestroyed())
         window.webContents.send(IpcChannels.mergeStateChanged, state)
