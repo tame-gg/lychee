@@ -10,6 +10,26 @@
 
   root.LycheeChangelog = [
     {
+      version: 'v0.1.2',
+      items: [
+        {
+          kind: 'new',
+          title: 'Downloads sidebar',
+          text: 'Filter downloads by status (downloading, queued, paused, needs attention, finished) or by file type, with counts. The sidebar can be collapsed, and Lychee remembers it.'
+        },
+        {
+          kind: 'improved',
+          title: 'File-type icons',
+          text: 'Each download in the list now shows an icon for its file type.'
+        },
+        {
+          kind: 'improved',
+          title: 'About',
+          text: 'About now shows the app version and links to tame.gg and the source on GitHub.'
+        }
+      ]
+    },
+    {
       version: 'v0.1.1',
       items: [
         {

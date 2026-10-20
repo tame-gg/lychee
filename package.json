@@ -1,6 +1,6 @@
 {
   "name": "lychee",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "productName": "Lychee",
   "description": "Speed up downloads by combining multiple network connections in parallel",
   "main": "./out/main/index.js",
