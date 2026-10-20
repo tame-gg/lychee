@@ -180,11 +180,31 @@ func weakHostDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT,
-		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, dacl, nil); err != nil {
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
 		return "", err
 	}
+	if err := windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT,
+		windows.OWNER_SECURITY_INFORMATION|windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
+		admins, nil, dacl, nil); err != nil {
+		return "", err
+	}
+	if !ownedByAdmin(dir) {
+		return "", fmt.Errorf("%s is not owned by Administrators or SYSTEM", dir)
+	}
 	return dir, nil
+}
+
+func ownedByAdmin(path string) bool {
+	sd, err := windows.GetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.OWNER_SECURITY_INFORMATION)
+	if err != nil {
+		return false
+	}
+	owner, _, err := sd.Owner()
+	if err != nil || owner == nil {
+		return false
+	}
+	return owner.IsWellKnown(windows.WinBuiltinAdministratorsSid) || owner.IsWellKnown(windows.WinLocalSystemSid)
 }
 
 func writeWeakHostFile(lines []string) error {
@@ -204,6 +224,10 @@ func readWeakHostFile() []string {
 	}
 	path := filepath.Join(dir, weakHostFileName)
 	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
+		return nil
+	}
+	if !ownedByAdmin(path) {
+		os.Remove(path)
 		return nil
 	}
 	b, err := os.ReadFile(path)
