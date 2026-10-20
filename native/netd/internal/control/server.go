@@ -440,12 +440,17 @@ func (s *Server) onClaim(m msgClaim) {
 	m.reply <- claimResult{}
 }
 
+func (s *Server) closeSession() {
+	s.session.nc.Close()
+	close(s.session.out)
+	s.session = nil
+}
+
 func (s *Server) dropSession() {
 	if s.session == nil {
 		return
 	}
-	s.session.nc.Close()
-	s.session = nil
+	s.closeSession()
 	s.statsCh = nil
 	s.stallCh = nil
 	if !s.quitting {
@@ -653,8 +658,7 @@ func (s *Server) doShutdown(code int) {
 		s.cfg.Listener.Close()
 	}
 	if s.session != nil {
-		s.session.nc.Close()
-		s.session = nil
+		s.closeSession()
 	}
 	s.exitCode = code
 }
