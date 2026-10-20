@@ -16,10 +16,11 @@ const (
 var lockFile *os.File
 
 func SingleInstance() bool {
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return false
 	}
+	f.Chmod(0o600)
 	if unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB) != nil {
 		f.Close()
 		return false
