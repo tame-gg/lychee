@@ -3,6 +3,7 @@ package control
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -327,3 +328,5 @@ func pipePeerCheck(authSID *windows.SID) func(net.Conn) (PeerInfo, error) {
 func CheckPrivilege() (int, error) {
 	return requireElevatedAdmin()
 }
+
+func SelfCheck(io.Writer) (int, error) { return ExitOK, nil }

@@ -117,3 +117,8 @@ func CheckPrivilege() (int, error) {
 	}
 	return ExitOK, nil
 }
+
+func pkexecLaunched() bool {
+	_, ok := os.LookupEnv("PKEXEC_UID")
+	return ok
+}

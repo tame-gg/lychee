@@ -5,6 +5,7 @@ package control
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -12,7 +13,26 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/tame-gg/lychee/native/netd/internal/platform"
 )
+
+func SelfCheck(stderr io.Writer) (int, error) {
+	root := os.Geteuid() == 0
+	var err error
+	if root {
+		err = checkOwnBinary()
+	}
+	return selfCheckVerdict(stderr, root, pkexecLaunched(), err)
+}
+
+func checkOwnBinary() error {
+	exe, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("cannot locate the helper binary: %w", err)
+	}
+	return platform.SelfCheck(exe)
+}
 
 func lstatDir(path string, wantUID int, allowGroupWorldRead bool) error {
 	fi, err := os.Lstat(path)

@@ -18,11 +18,6 @@ const (
 )
 
 func Listen(path string) (*Transport, int, error) {
-	if exe, err := os.Executable(); err == nil {
-		if err := platform.SelfCheck(exe); err != nil {
-			return nil, ExitRefused, fmt.Errorf("self-check failed: %w", err)
-		}
-	}
 	authUID, ok := authorizedUID()
 	if !ok {
 		return nil, ExitRefused, errors.New("SUDO_UID is not a valid uid")
@@ -98,3 +93,5 @@ func CheckPrivilege() (int, error) {
 	}
 	return ExitOK, nil
 }
+
+func pkexecLaunched() bool { return false }

@@ -56,6 +56,10 @@ func serve(args []string) int {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		return code
 	}
+	if code, err := control.SelfCheck(os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		return code
+	}
 	if platform.NetMergeRunning() {
 		fmt.Fprintln(os.Stderr, "another connection-merging tool is running")
 		return control.ExitConflict
