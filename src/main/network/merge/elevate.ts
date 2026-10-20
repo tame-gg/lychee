@@ -59,13 +59,22 @@ export interface HelperEnvironment {
   resourcesPath: string
   appRoot: string
   env: NodeJS.ProcessEnv
+  uid?: number
+}
+
+export interface HelperLocation {
+  binary: string
+  bundled?: string
 }
 
 export const ADMIN_ACCOUNT_MESSAGE =
   'Combining connections system-wide needs an administrator account on this PC'
 export const ANOTHER_TOOL_MESSAGE = 'another connection-merging tool is running'
-export const MAC_HELPER = '/Library/PrivilegedHelperTools/gg.tame.lychee.netd'
+export const MAC_HELPER_DIR = '/Library/PrivilegedHelperTools'
+export const MAC_HELPER = `${MAC_HELPER_DIR}/gg.tame.lychee.netd`
 export const MAC_CONTROL = '/var/run/lychee-netd/netd.sock'
+export const MAC_PROMPT = 'Lychee needs an administrator password to combine your connections.'
+export const PERMISSION_MESSAGE = 'permission to start the network helper was not given'
 export const LINUX_SYSTEM_HELPER = '/usr/lib/lychee/lychee-netd'
 export const LINUX_ROOT_CONTROL = '/run/lychee-netd/netd.sock'
 export const PIPE_PREFIX = '\\\\.\\pipe\\lychee-netd-'
@@ -94,7 +103,13 @@ function buildDir(arch: string): string {
   return arch === 'arm64' ? 'arm64' : 'x64'
 }
 
-export function helperLocation(env: HelperEnvironment): { binary: string } | FailedLaunch {
+function bundledBinary(env: HelperEnvironment, os: 'mac' | 'linux' | 'win', name: string): string {
+  return env.packaged
+    ? join(env.resourcesPath, 'helper', name)
+    : join(env.appRoot, 'build', 'netd', `${os}-${buildDir(env.arch)}`, name)
+}
+
+export function helperLocation(env: HelperEnvironment): HelperLocation | FailedLaunch {
   if (env.platform === 'win32') {
     if (env.arch !== 'x64') {
       return {
@@ -103,9 +118,7 @@ export function helperLocation(env: HelperEnvironment): { binary: string } | Fai
         message: 'combining connections is not available on Windows on ARM yet'
       }
     }
-    const binary = env.packaged
-      ? join(env.resourcesPath, 'helper', 'lychee-netd.exe')
-      : join(env.appRoot, 'build', 'netd', 'win-x64', 'lychee-netd.exe')
+    const binary = bundledBinary(env, 'win', 'lychee-netd.exe')
     if (!existsSync(binary)) {
       return {
         kind: 'failed',
@@ -116,19 +129,19 @@ export function helperLocation(env: HelperEnvironment): { binary: string } | Fai
     return { binary }
   }
   if (env.platform === 'darwin') {
-    if (!existsSync(MAC_HELPER)) {
+    const bundled = bundledBinary(env, 'mac', 'lychee-netd')
+    if (!existsSync(bundled)) {
       return {
         kind: 'failed',
-        status: 'not_installed',
-        message: 'the network helper is not installed yet'
+        status: 'unsupported',
+        message: 'the network helper is not part of this build'
       }
     }
-    return { binary: MAC_HELPER }
+    return { binary: MAC_HELPER, bundled }
   }
   if (env.platform === 'linux') {
-    const candidates = env.packaged
-      ? [LINUX_SYSTEM_HELPER, join(env.resourcesPath, 'helper', 'lychee-netd')]
-      : [join(env.appRoot, 'build', 'netd', `linux-${buildDir(env.arch)}`, 'lychee-netd')]
+    const bundled = bundledBinary(env, 'linux', 'lychee-netd')
+    const candidates = env.packaged ? [LINUX_SYSTEM_HELPER, bundled] : [bundled]
     const binary = candidates.find((candidate) => existsSync(candidate))
     if (!binary) {
       return {
@@ -137,13 +150,66 @@ export function helperLocation(env: HelperEnvironment): { binary: string } | Fai
         message: 'the network helper is not part of this build'
       }
     }
-    return { binary }
+    return { binary, bundled }
   }
   return {
     kind: 'failed',
     status: 'unsupported',
     message: `combining connections is not available on ${env.platform}`
   }
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+export function appleScriptString(text: string): string {
+  return `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+/** What runs as root after the administrator password: a root-owned copy of the bundled helper
+ * when there is none or it is not Lychee's version, then the helper itself, told which user
+ * may connect (the helper reads SUDO_UID, as under sudo). Paths are quoted for /bin/sh. */
+export function macAdminShellScript(options: {
+  bundled: string
+  install: boolean
+  uid: number
+}): string {
+  const temp = `${MAC_HELPER}.tmp`
+  const steps = ['set -e']
+  if (options.install) {
+    steps.push(
+      `/bin/mkdir -p ${shellQuote(MAC_HELPER_DIR)}`,
+      `/usr/sbin/chown root:wheel ${shellQuote(MAC_HELPER_DIR)}`,
+      `/bin/chmod 755 ${shellQuote(MAC_HELPER_DIR)}`,
+      `/bin/cp ${shellQuote(options.bundled)} ${shellQuote(temp)}`,
+      `/usr/sbin/chown root:wheel ${shellQuote(temp)}`,
+      `/bin/chmod 755 ${shellQuote(temp)}`,
+      `/bin/mv -f ${shellQuote(temp)} ${shellQuote(MAC_HELPER)}`
+    )
+  }
+  steps.push(
+    `exec /usr/bin/env SUDO_UID=${Math.trunc(options.uid)} ${shellQuote(MAC_HELPER)} serve --control ${shellQuote(MAC_CONTROL)}`
+  )
+  return steps.join('; ')
+}
+
+export function macAdminAppleScript(shell: string): string {
+  return `do shell script ${appleScriptString(shell)} with administrator privileges with prompt ${appleScriptString(MAC_PROMPT)}`
+}
+
+const OSASCRIPT_ERROR = /execution error:\s*([\s\S]*?)\s*\((-?\d+)\)$/
+
+/** osascript exits 1 for any failing script and reports the shell's exit status (or -128 for a
+ * dismissed password prompt) at the end of its stderr; that status is the helper's. */
+export function osascriptOutcome(
+  exit: HelperExit,
+  stderr: string
+): { exit: HelperExit; stderr: string } {
+  if (exit.code !== 1) return { exit, stderr }
+  const match = OSASCRIPT_ERROR.exec(stderr.trim())
+  if (!match) return { exit, stderr }
+  return { exit: { code: Number(match[2]), signal: null }, stderr: match[1] }
 }
 
 function lastLine(stderr: string): string {
@@ -174,15 +240,14 @@ export function exitStatus(
       }
     case 6:
       return { status: 'needs_admin', message: ADMIN_ACCOUNT_MESSAGE }
+    case -128:
+      return { status: 'needs_permission', message: PERMISSION_MESSAGE }
     case 126:
     case 127:
     case 1223:
-      return {
-        status: 'needs_permission',
-        message: text('permission to start the network helper was not given')
-      }
+      return { status: 'needs_permission', message: text(PERMISSION_MESSAGE) }
     case 1:
-      if (platform === 'darwin') {
+      if (platform === 'darwin' && /sudo/i.test(stderr)) {
         return {
           status: 'not_installed',
           message: text('Lychee is not allowed to start the network helper without a password')
@@ -234,7 +299,7 @@ class SpawnedHelper implements HelperProcess {
         this.append(`${error.message}\n`)
         finish({ code: null, signal: null })
       })
-      child.on('exit', (code, signal) => finish({ code, signal }))
+      child.on('close', (code, signal) => finish({ code, signal }))
     })
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = String(chunk)
@@ -270,6 +335,36 @@ class SpawnedHelper implements HelperProcess {
 
   private append(text: string): void {
     this.stderr = (this.stderr + text).slice(-STDERR_KEEP)
+  }
+}
+
+class OsascriptHelper implements HelperProcess {
+  readonly exited: Promise<HelperExit>
+
+  constructor(private readonly inner: SpawnedHelper) {
+    this.exited = inner.exited.then((exit) => osascriptOutcome(exit, inner.stderr).exit)
+  }
+
+  get pid(): number | null {
+    return this.inner.pid
+  }
+
+  get exit(): HelperExit | null {
+    const exit = this.inner.exit
+    return exit ? osascriptOutcome(exit, this.inner.stderr).exit : null
+  }
+
+  get stderr(): string {
+    const exit = this.inner.exit
+    return exit ? osascriptOutcome(exit, this.inner.stderr).stderr : this.inner.stderr
+  }
+
+  exitWithin(ms: number): Promise<HelperExit | null> {
+    return Promise.race([this.exited, sleep(ms).then(() => null)])
+  }
+
+  kill(): void {
+    this.inner.kill()
   }
 }
 
@@ -328,9 +423,9 @@ export class NativeLauncher implements Launcher {
     if ('kind' in location) return location
     switch (this.env.platform) {
       case 'linux':
-        return this.launchLinux(location.binary)
+        return this.launchLinux(location.binary, location.bundled ?? null)
       case 'darwin':
-        return this.launchDarwin(location.binary)
+        return this.launchDarwin(location.bundled ?? location.binary)
       case 'win32':
         return this.launchWindows(location.binary)
       default:
@@ -341,7 +436,26 @@ export class NativeLauncher implements Launcher {
     }
   }
 
-  private async launchLinux(binary: string): Promise<LaunchResult> {
+  private async launchLinux(chosen: string, bundled: string | null): Promise<LaunchResult> {
+    let binary = chosen
+    const installed = await reportedVersion(binary, this.env.env)
+    if (installed === null) {
+      return failed('unavailable', `the network helper at ${binary} could not be run`)
+    }
+    if (installed !== this.env.version) {
+      const fallback =
+        binary !== bundled && bundled && existsSync(bundled)
+          ? await reportedVersion(bundled, this.env.env)
+          : null
+      if (fallback !== this.env.version) {
+        return failed(
+          'out_of_date',
+          `the installed network helper is version ${installed}, Lychee is ${this.env.version}`
+        )
+      }
+      this.log(`${binary} is version ${installed}; using the packaged copy ${bundled}`)
+      binary = bundled as string
+    }
     const runtimeDir = this.env.env.XDG_RUNTIME_DIR
     if (runtimeDir && isAbsolute(runtimeDir)) {
       const path = join(runtimeDir, 'lychee', 'netd.sock')
@@ -369,19 +483,33 @@ export class NativeLauncher implements Launcher {
     return failed(status, message)
   }
 
-  private async launchDarwin(binary: string): Promise<LaunchResult> {
-    const args = [binary, 'serve', '--control', MAC_CONTROL]
-    if (!(await succeeds('/usr/bin/sudo', ['-n', '-l', ...args], this.env.env))) {
-      return failed('not_installed', 'Lychee is not allowed to start the network helper yet')
+  /** The root-owned copy in /Library/PrivilegedHelperTools runs through the passwordless sudo
+   * rule where one is set up (plan section 4), else through one administrator prompt per
+   * Lychee session, which also installs or updates the copy from the bundled helper first. */
+  private async launchDarwin(bundled: string): Promise<LaunchResult> {
+    const args = [MAC_HELPER, 'serve', '--control', MAC_CONTROL]
+    const installed = await reportedVersion(MAC_HELPER, this.env.env)
+    const current = installed === this.env.version
+    if (current && (await succeeds('/usr/bin/sudo', ['-n', '-l', ...args], this.env.env))) {
+      const helper = spawnHelper('/usr/bin/sudo', ['-n', ...args], this.env.env, this.log)
+      const early = await helper.exitWithin(EARLY_EXIT_MS)
+      if (!early) return { kind: 'launched', process: helper, path: MAC_CONTROL }
+      const { status, message } = exitStatus(early, helper.stderr, 'darwin')
+      return failed(status, message)
     }
-    const installed = await reportedVersion(binary, this.env.env)
-    if (installed !== this.env.version) {
-      return failed(
-        'out_of_date',
-        `the installed network helper is version ${installed ?? 'unknown'}, Lychee is ${this.env.version}`
+    const uid = this.env.uid
+    if (uid === undefined) {
+      return failed('unavailable', 'cannot tell which user may use the network helper')
+    }
+    if (!current) {
+      this.log(
+        `installing the network helper ${this.env.version} over ${installed ?? 'none'} at ${MAC_HELPER}`
       )
     }
-    const helper = spawnHelper('/usr/bin/sudo', ['-n', ...args], this.env.env, this.log)
+    const script = macAdminAppleScript(macAdminShellScript({ bundled, install: !current, uid }))
+    const helper = new OsascriptHelper(
+      spawnHelper('/usr/bin/osascript', ['-e', script], this.env.env, this.log)
+    )
     const early = await helper.exitWithin(EARLY_EXIT_MS)
     if (!early) return { kind: 'launched', process: helper, path: MAC_CONTROL }
     const { status, message } = exitStatus(early, helper.stderr, 'darwin')

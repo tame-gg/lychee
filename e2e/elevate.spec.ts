@@ -5,9 +5,16 @@ import { expect, test } from '@playwright/test'
 import {
   ADMIN_ACCOUNT_MESSAGE,
   ANOTHER_TOOL_MESSAGE,
+  MAC_CONTROL,
+  MAC_HELPER,
+  PERMISSION_MESSAGE,
+  appleScriptString,
   connectOnlyLauncher,
   exitStatus,
   helperLocation,
+  macAdminAppleScript,
+  macAdminShellScript,
+  osascriptOutcome,
   type HelperEnvironment
 } from '../src/main/network/merge/elevate'
 
@@ -39,7 +46,10 @@ test.describe('helperLocation', () => {
     const binary = join(root, 'build', 'netd', 'linux-arm64', 'lychee-netd')
     mkdirSync(join(root, 'build', 'netd', 'linux-arm64'), { recursive: true })
     writeFileSync(binary, '')
-    expect(helperLocation(environment({ arch: 'arm64', appRoot: root }))).toEqual({ binary })
+    expect(helperLocation(environment({ arch: 'arm64', appRoot: root }))).toEqual({
+      binary,
+      bundled: binary
+    })
     expect(helperLocation(environment({ arch: 'x64', appRoot: root }))).toMatchObject({
       kind: 'failed',
       status: 'unsupported'
@@ -51,7 +61,7 @@ test.describe('helperLocation', () => {
     mkdirSync(join(root, 'resources', 'helper'), { recursive: true })
     writeFileSync(packaged, '')
     const env = environment({ packaged: true, resourcesPath: join(root, 'resources') })
-    expect(helperLocation(env)).toEqual({ binary: packaged })
+    expect(helperLocation(env)).toEqual({ binary: packaged, bundled: packaged })
   })
 
   test('Windows on ARM and a build without the helper are unsupported', () => {
@@ -69,12 +79,19 @@ test.describe('helperLocation', () => {
     expect(helperLocation(environment({ platform: 'win32', appRoot: root }))).toEqual({ binary })
   })
 
-  test('macOS needs the root-owned installed copy', () => {
-    test.skip(process.platform === 'darwin', 'the installed copy may exist on a Mac')
+  test('macOS installs the bundled helper to the root-owned path', () => {
     expect(helperLocation(environment({ platform: 'darwin' }))).toMatchObject({
       kind: 'failed',
-      status: 'not_installed'
+      status: 'unsupported'
     })
+    const bundled = join(root, 'resources', 'helper', 'lychee-netd')
+    mkdirSync(join(root, 'resources', 'helper'), { recursive: true })
+    writeFileSync(bundled, '')
+    expect(
+      helperLocation(
+        environment({ platform: 'darwin', packaged: true, resourcesPath: join(root, 'resources') })
+      )
+    ).toEqual({ binary: MAC_HELPER, bundled })
   })
 
   test('other platforms are unsupported', () => {
@@ -117,9 +134,17 @@ test.describe('exitStatus', () => {
     for (const code of [126, 127, 1223]) {
       expect(exitStatus(exit(code), '', 'linux').status).toBe('needs_permission')
     }
+    expect(exitStatus(exit(-128), 'User canceled.', 'darwin')).toEqual({
+      status: 'needs_permission',
+      message: PERMISSION_MESSAGE
+    })
     expect(exitStatus(exit(1), 'sudo: a password is required\n', 'darwin')).toEqual({
       status: 'not_installed',
       message: 'sudo: a password is required'
+    })
+    expect(exitStatus(exit(1), 'route add: something broke\n', 'darwin')).toEqual({
+      status: 'unavailable',
+      message: 'route add: something broke'
     })
     expect(exitStatus(exit(1), '', 'linux')).toEqual({
       status: 'unavailable',
@@ -149,4 +174,66 @@ test('connectOnlyLauncher only names the control path', async () => {
   expect(result.process.pid).toBeNull()
   expect(result.verify).toBeUndefined()
   result.process.kill()
+})
+
+test.describe('macOS administrator prompt', () => {
+  test('the shell script installs a root-owned copy only when asked, then runs it for the user', () => {
+    const install = macAdminShellScript({
+      bundled: "/Applications/Lychee's Apps/Lychee.app/Contents/Resources/helper/lychee-netd",
+      install: true,
+      uid: 501
+    })
+    expect(install.split('; ')).toEqual([
+      'set -e',
+      "/bin/mkdir -p '/Library/PrivilegedHelperTools'",
+      "/usr/sbin/chown root:wheel '/Library/PrivilegedHelperTools'",
+      "/bin/chmod 755 '/Library/PrivilegedHelperTools'",
+      `/bin/cp '/Applications/Lychee'\\''s Apps/Lychee.app/Contents/Resources/helper/lychee-netd' '${MAC_HELPER}.tmp'`,
+      `/usr/sbin/chown root:wheel '${MAC_HELPER}.tmp'`,
+      `/bin/chmod 755 '${MAC_HELPER}.tmp'`,
+      `/bin/mv -f '${MAC_HELPER}.tmp' '${MAC_HELPER}'`,
+      `exec /usr/bin/env SUDO_UID=501 '${MAC_HELPER}' serve --control '${MAC_CONTROL}'`
+    ])
+    const launchOnly = macAdminShellScript({ bundled: '/x/lychee-netd', install: false, uid: 502 })
+    expect(launchOnly).toBe(
+      `set -e; exec /usr/bin/env SUDO_UID=502 '${MAC_HELPER}' serve --control '${MAC_CONTROL}'`
+    )
+    expect(launchOnly).not.toContain('/x/lychee-netd')
+  })
+
+  test('the AppleScript quotes the shell script and asks with administrator privileges', () => {
+    expect(appleScriptString('say "hi" \\ bye')).toBe('"say \\"hi\\" \\\\ bye"')
+    const script = macAdminAppleScript("echo 'a'")
+    expect(script).toBe(
+      'do shell script "echo \'a\'" with administrator privileges with prompt "Lychee needs an administrator password to combine your connections."'
+    )
+  })
+
+  test('the helper exit status is read back from osascript', () => {
+    const one = { code: 1, signal: null }
+    expect(osascriptOutcome(one, '32:120: execution error: User canceled. (-128)\n')).toEqual({
+      exit: { code: -128, signal: null },
+      stderr: 'User canceled.'
+    })
+    expect(
+      osascriptOutcome(one, 'execution error: error: the network helper must run as root (3)')
+    ).toEqual({
+      exit: { code: 3, signal: null },
+      stderr: 'error: the network helper must run as root'
+    })
+    expect(
+      osascriptOutcome(one, 'execution error: The command exited with a non-zero status. (4)')
+    ).toEqual({
+      exit: { code: 4, signal: null },
+      stderr: 'The command exited with a non-zero status.'
+    })
+    expect(osascriptOutcome({ code: 0, signal: null }, '')).toEqual({
+      exit: { code: 0, signal: null },
+      stderr: ''
+    })
+    expect(osascriptOutcome(one, 'something else entirely')).toEqual({
+      exit: one,
+      stderr: 'something else entirely'
+    })
+  })
 })

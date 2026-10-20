@@ -65,6 +65,7 @@ function handle<K extends keyof IpcContract>(
 }
 
 const DESTINATION_CHECK_MS = 300
+const HELPER_PROMPT_MS = 180_000
 
 async function freeSpace(dir: string): Promise<number | null> {
   try {
@@ -100,11 +101,15 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
             packaged: app.isPackaged,
             resourcesPath: process.resourcesPath,
             appRoot: app.getAppPath(),
-            env: process.env
+            env: process.env,
+            uid: process.getuid?.()
           },
           (line) => console.log(`[lychee-netd] ${line}`)
         ),
     version: app.getVersion(),
+    // Starting the real helper can wait on a password prompt (macOS, pkexec, UAC); the wait ends
+    // early when the prompt is dismissed, as the helper exits then.
+    timing: testKnobs.netdControlPath ? undefined : { connectTimeoutMs: HELPER_PROMPT_MS },
     settings: {
       load: async () => (await loadSettings()).merge ?? DEFAULT_MERGE_SETTINGS,
       save: (settings) => saveSettings({ merge: settings })
