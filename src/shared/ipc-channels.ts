@@ -34,5 +34,12 @@ export const IpcChannels = {
   dismissLink: 'app:dismiss-link',
   updateState: 'update:state',
   updateStateChanged: 'update:state-changed',
-  showUpdateMenu: 'update:show-menu'
+  showUpdateMenu: 'update:show-menu',
+  mergeState: 'merge:state',
+  setMerging: 'merge:set-merging',
+  setMergeOptions: 'merge:set-options',
+  setMergeNetwork: 'merge:set-network',
+  setMergeWeight: 'merge:set-weight',
+  repairNetwork: 'merge:repair',
+  mergeStateChanged: 'merge:state-changed'
 } as const

@@ -5,6 +5,8 @@ import type {
   AppSettings,
   DownloadUpdate,
   InitialState,
+  MergeOptionsPatch,
+  MergeState,
   NetworkInterfaceInfo,
   UpdateState
 } from '../shared/types'
@@ -61,6 +63,12 @@ const lycheeApi = {
   resumeFromLink: (linkId: string, downloadId: string) =>
     invoke('resumeFromLink', linkId, downloadId),
   dismissLink: (id: string) => invoke('dismissLink', id),
+  mergeState: () => invoke('mergeState'),
+  setMerging: (on: boolean) => invoke('setMerging', on),
+  setMergeOptions: (patch: MergeOptionsPatch) => invoke('setMergeOptions', patch),
+  setMergeNetwork: (id: string, enabled: boolean) => invoke('setMergeNetwork', id, enabled),
+  setMergeWeight: (id: string, weight: number | 'auto') => invoke('setMergeWeight', id, weight),
+  repairNetwork: () => invoke('repairNetwork'),
 
   /** pendingLinks() has the new link. */
   onLinkReceived: (callback: () => void): (() => void) => {
@@ -93,6 +101,12 @@ const lycheeApi = {
       callback(networks)
     ipcRenderer.on(IpcChannels.networksChanged, listener)
     return () => ipcRenderer.removeListener(IpcChannels.networksChanged, listener)
+  },
+
+  onMergeState: (callback: (state: MergeState) => void): (() => void) => {
+    const listener = (_event: IpcRendererEvent, state: MergeState): void => callback(state)
+    ipcRenderer.on(IpcChannels.mergeStateChanged, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.mergeStateChanged, listener)
   }
 }
 

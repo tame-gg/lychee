@@ -9,6 +9,7 @@ import {
   type ThemeSource
 } from '../shared/types'
 import { readJson, updateJson } from './jsonFile'
+import { sanitizeMergeSettings } from '../shared/mergeSettings'
 import { DEFAULT_DOWNLOAD_SCHEDULE, validSchedule } from '../shared/downloadSchedule'
 
 function settingsPath(): string {
@@ -94,6 +95,7 @@ function sanitizeSettings(parsed: unknown): AppSettings {
   }
   if (parsed.browserExtensionUsed === true) settings.browserExtensionUsed = true
   if (parsed.sidebarCollapsed === true) settings.sidebarCollapsed = true
+  if (parsed.merge !== undefined) settings.merge = sanitizeMergeSettings(parsed.merge)
   return settings
 }
 
