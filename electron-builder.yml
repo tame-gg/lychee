@@ -32,6 +32,8 @@ extraResources:
     to: NOTICE
   - from: build/licenses/net-merge-LICENSE.txt
     to: licenses/net-merge-LICENSE.txt
+  - from: build/licenses/lightning-LICENSE.txt
+    to: licenses/lightning-LICENSE.txt
 win:
   # Wintun (wintun.dll) ships only in Windows builds, and its license must ship with it.
   # electron-builder adds this to the top-level extraResources above.

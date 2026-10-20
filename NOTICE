@@ -15,3 +15,8 @@ wintun.h, and distributed alongside software that uses it that way.
 https://www.wintun.net/
 Copyright (C) 2018-2021 WireGuard LLC. All Rights Reserved.
 License text: build/licenses/wintun-LICENSE.txt (shipped in Windows builds)
+
+Lightning by alisinaee (MIT): the downloads sidebar, the file-type icons, and the file-type
+and list-count helpers, adapted.
+Copyright (c) 2026 Anmol Kapil
+License text: build/licenses/lightning-LICENSE.txt

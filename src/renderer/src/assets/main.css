@@ -101,6 +101,25 @@
   --swatch-coral: #c4572a;
   --swatch-coral-onsolid: #ffffff;
 
+  --kind-video: var(--swatch-violet);
+  --kind-audio: var(--swatch-rose);
+  --kind-archive: var(--swatch-amber);
+  --kind-document: var(--swatch-steel);
+  --kind-program: var(--swatch-lime);
+  --kind-image: var(--swatch-teal);
+  --kind-torrent: var(--swatch-coral);
+  --kind-disk: var(--swatch-cyan);
+  --kind-other: var(--color-neutral);
+  --kind-video-bg: color-mix(in srgb, var(--kind-video) 14%, transparent);
+  --kind-audio-bg: color-mix(in srgb, var(--kind-audio) 14%, transparent);
+  --kind-archive-bg: color-mix(in srgb, var(--kind-archive) 14%, transparent);
+  --kind-document-bg: color-mix(in srgb, var(--kind-document) 14%, transparent);
+  --kind-program-bg: color-mix(in srgb, var(--kind-program) 14%, transparent);
+  --kind-image-bg: color-mix(in srgb, var(--kind-image) 14%, transparent);
+  --kind-torrent-bg: color-mix(in srgb, var(--kind-torrent) 14%, transparent);
+  --kind-disk-bg: color-mix(in srgb, var(--kind-disk) 14%, transparent);
+  --kind-other-bg: color-mix(in srgb, var(--kind-other) 14%, transparent);
+
   /* tame.gg gold, deepened until white text on it (and it as link text on white) clears 4.5:1. */
   --color-accent: #946a12;
   --color-accent-onsolid: #ffffff;

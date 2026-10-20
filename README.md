@@ -240,6 +240,8 @@ Electron, React 19, TypeScript, Tailwind CSS v4, Base UI, Zustand, WebTorrent, a
 
 Lychee is based on Plexo by anmolkapil (https://github.com/anmolkapil/plexo), MIT license.
 
+Portions adapted from Lightning by alisinaee (MIT). See [NOTICE](NOTICE).
+
 Lychee is maintained by [tame.gg](https://tame.gg/projects/lychee).
 
 ## License

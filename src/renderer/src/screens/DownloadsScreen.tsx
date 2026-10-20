@@ -1,12 +1,14 @@
 import type { DownloadState, FinishedDownload } from '@shared/types'
-import { ChevronRight, Plus, X } from 'lucide-react'
+import { ChevronRight, Folder, Plus, X } from 'lucide-react'
 import { cn } from 'cn'
 import { Fragment, memo, useCallback, useEffect, useState } from 'react'
 import { DownloadContextMenu } from '../components/DownloadContextMenu'
 import { useDownloadActions, useDownloadActionsState } from '../components/downloadActionsContext'
 import { ACTION_META, toolbarLabel } from '../components/downloadActionMeta'
 import { MoreActionsMenu } from '../components/MoreActionsMenu'
-import { DownloadFilterMenu } from '../components/DownloadFilterMenu'
+import { DownloadsSidebar } from '../components/DownloadsSidebar'
+import { FileKindIcon } from '../components/FileKindIcon'
+import { statusEntry, STATUS_ENTRIES } from '../components/statusEntries'
 import { CombineDiagram } from '../components/CombineDiagram'
 import { LimitsDialog } from '../components/LimitsDialog'
 import { ScheduleIndicator } from '../components/ScheduleIndicator'
@@ -18,10 +20,11 @@ import { Button } from '../components/ui/button'
 import { Checkbox } from '../components/ui/checkbox'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip'
 import { useNetworkVisuals, type ResolveNetworkVisual } from '../hooks/useNetworkVisuals'
-import { useAppStore, type DownloadFilter } from '../store/useAppStore'
+import { useAppStore } from '../store/useAppStore'
+import { countItems, matchesFilter, statusOf, type DownloadStatusKey } from '../utils/downloadList'
+import { FILE_KINDS, kindOfDownload } from '../utils/fileKind'
 import {
   describeError,
-  fileExtensionBadge,
   formatBytes,
   formatEta,
   formatPercent,
@@ -42,29 +45,22 @@ import {
 type Item = DownloadState | FinishedDownload
 
 interface Group {
+  status: DownloadStatusKey
   label: string
   items: Item[]
 }
 
-function filterOf(item: Item): Exclude<DownloadFilter, 'all'> {
-  if ('unitsWritten' in item || item.status === 'completed') return 'finished'
-  return item.status === 'error' ? 'failed' : 'progress'
-}
-
-function groupsOf(downloads: DownloadState[], history: FinishedDownload[]): Group[] {
-  const byStatus = (status: DownloadState['status']): DownloadState[] =>
-    downloads.filter((download) => download.status === status)
-  return [
-    { label: 'Downloading', items: byStatus('downloading') },
-    {
-      label: 'Queued',
-      items: byStatus('queued').sort((a, b) => (a.queuedAt ?? 0) - (b.queuedAt ?? 0))
-    },
-    { label: 'Paused', items: byStatus('paused') },
-    { label: 'Needs attention', items: byStatus('error') },
-    // Completed but not in history yet: on its way there, so listed with it.
-    { label: 'Finished', items: [...byStatus('completed'), ...history] }
-  ].filter((group) => group.items.length > 0)
+function groupsOf(items: Item[]): Group[] {
+  return STATUS_ENTRIES.flatMap(({ value, label }) => {
+    if (value === 'all') return []
+    const grouped = items.filter((item) => statusOf(item) === value)
+    if (value === 'queued') {
+      grouped.sort(
+        (a, b) => ((a as DownloadState).queuedAt ?? 0) - ((b as DownloadState).queuedAt ?? 0)
+      )
+    }
+    return grouped.length > 0 ? [{ status: value, label, items: grouped }] : []
+  })
 }
 
 /** "2 downloading · 1 queued", or "all done". */
@@ -92,6 +88,8 @@ export function DownloadsScreen(): React.JSX.Element {
   const openNewDownload = useAppStore((store) => store.openNewDownload)
   const filter = useAppStore((store) => store.downloadFilter)
   const setFilter = useAppStore((store) => store.setDownloadFilter)
+  const kind = useAppStore((store) => store.downloadKind)
+  const setKind = useAppStore((store) => store.setDownloadKind)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const { perform, askClearFinished } = useDownloadActions()
   const { busy } = useDownloadActionsState()
@@ -108,19 +106,17 @@ export function DownloadsScreen(): React.JSX.Element {
   const downloads = Object.values(downloadsById)
     .filter((download) => download.status !== 'cancelled')
     .sort((a, b) => a.startedAt - b.startedAt)
-  const allGroups = groupsOf(downloads, history)
-  const allItems = allGroups.flatMap((group) => group.items)
-  const counts: Record<DownloadFilter, number> = {
-    all: allItems.length,
-    progress: 0,
-    finished: 0,
-    failed: 0
-  }
-  for (const item of allItems) counts[filterOf(item)]++
-  const groups = allGroups.filter(
-    (group) => filter === 'all' || filterOf(group.items[0]) === filter
-  )
+  const allItems: Item[] = [...downloads, ...history]
+  const counts = countItems(allItems)
+  const groups = groupsOf(allItems.filter((item) => matchesFilter(item, filter, kind)))
   const items = groups.flatMap((group) => group.items)
+  const statusLabel = statusEntry(filter).label
+  const kindLabel = FILE_KINDS.find((entry) => entry.kind === kind)?.label
+  const title = !kindLabel
+    ? statusLabel
+    : filter === 'all'
+      ? kindLabel
+      : `${statusLabel} · ${kindLabel}`
   // Only what's still listed counts: one that finished or went is no longer selected.
   const chosen = items.filter((item) => selected.has(item.id))
 
@@ -182,168 +178,181 @@ export function DownloadsScreen(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-full flex-col bg-background">
-      {chosen.length === 0 ? (
-        <div className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-border px-5">
-          <DownloadFilterMenu
-            value={filter}
-            counts={counts}
-            onChange={(next) => {
-              setFilter(next)
-              setSelected(new Set())
-            }}
-          />
-          {/* One group already says it in its header. */}
-          {allGroups.length > 1 && (
-            <div className="font-mono text-[11.5px] leading-none text-muted-foreground">
-              {summaryOf(downloads)}
+    <div className="flex h-full bg-background">
+      <DownloadsSidebar
+        counts={counts}
+        filter={filter}
+        kind={kind}
+        onFilter={(next) => {
+          setFilter(next)
+          setSelected(new Set())
+        }}
+        onKind={(next) => {
+          setKind(next)
+          setSelected(new Set())
+        }}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {chosen.length === 0 ? (
+          <div className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-border px-5">
+            <h1 className="shrink-0 font-sans text-[14px] leading-none font-semibold">{title}</h1>
+            {/* One group already says it in its header. */}
+            {new Set(allItems.map(statusOf)).size > 1 && (
+              <div className="min-w-0 truncate font-mono text-[11.5px] leading-none text-muted-foreground">
+                {summaryOf(downloads)}
+              </div>
+            )}
+            <div className="flex-1" />
+            <ScheduleIndicator onClick={openSchedule} />
+            <NetworksMenu
+              onOpenLimits={(page) => {
+                setShowSchedule(false)
+                setLimitsPage(page)
+                setLimitsOpen(true)
+              }}
+            />
+            <Button type="button" onClick={() => openNewDownload()}>
+              <Plus data-icon="inline-start" />
+              New download
+            </Button>
+          </div>
+        ) : (
+          <div
+            role="toolbar"
+            aria-label="Selected downloads"
+            aria-busy={busy}
+            className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-border px-5"
+          >
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label="Deselect all"
+                    disabled={busy}
+                    onClick={() => setSelected(new Set())}
+                  >
+                    <X />
+                  </Button>
+                }
+              />
+              <TooltipContent>Deselect all</TooltipContent>
+            </Tooltip>
+            <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold">
+              {chosen.length} selected
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy || chosen.length === items.length}
+              onClick={() => setSelected(new Set(items.map((item) => item.id)))}
+            >
+              Select all
+            </Button>
+            <div className="flex-1" />
+            <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {toolbarButtons.map(({ id, targets }) => (
+                <Button
+                  key={id}
+                  type="button"
+                  size="sm"
+                  variant={ACTION_META[id].destructive ? 'destructive' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => void perform(id, targets)}
+                >
+                  {toolbarLabel(id, targets.length)}
+                </Button>
+              ))}
+              <MoreActionsMenu groups={moreActions} disabled={busy} />
             </div>
-          )}
-          <div className="flex-1" />
-          <ScheduleIndicator onClick={openSchedule} />
-          <NetworksMenu
-            onOpenLimits={(page) => {
-              setShowSchedule(false)
-              setLimitsPage(page)
-              setLimitsOpen(true)
-            }}
-          />
-          <Button type="button" onClick={() => openNewDownload()}>
-            <Plus data-icon="inline-start" />
-            New download
-          </Button>
-        </div>
-      ) : (
-        <div
-          role="toolbar"
-          aria-label="Selected downloads"
-          aria-busy={busy}
-          className="flex h-12 shrink-0 items-center gap-3 border-b-[0.5px] border-border px-5"
-        >
-          <Tooltip>
-            <TooltipTrigger
-              render={
+            <ScheduleIndicator onClick={openSchedule} />
+          </div>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
+          {groups.length === 0 &&
+            (allItems.length === 0 ? (
+              <EmptyState />
+            ) : (
+              <div
+                role="status"
+                className="flex flex-col items-center gap-2 px-5 py-16 text-center"
+              >
+                <p className="text-[16px] font-semibold">
+                  {kind ? 'No matching downloads' : statusEntry(filter).empty}
+                </p>
                 <Button
                   type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  aria-label="Deselect all"
-                  disabled={busy}
-                  onClick={() => setSelected(new Set())}
+                  variant="secondary"
+                  onClick={() => {
+                    setFilter('all')
+                    setKind(null)
+                  }}
                 >
-                  <X />
+                  Show all downloads
                 </Button>
-              }
-            />
-            <TooltipContent>Deselect all</TooltipContent>
-          </Tooltip>
-          <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold">
-            {chosen.length} selected
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={busy || chosen.length === items.length}
-            onClick={() => setSelected(new Set(items.map((item) => item.id)))}
-          >
-            Select all
-          </Button>
-          <div className="flex-1" />
-          <div className="flex min-w-0 items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {toolbarButtons.map(({ id, targets }) => (
-              <Button
-                key={id}
-                type="button"
-                size="sm"
-                variant={ACTION_META[id].destructive ? 'destructive' : 'secondary'}
-                disabled={busy}
-                onClick={() => void perform(id, targets)}
-              >
-                {toolbarLabel(id, targets.length)}
-              </Button>
-            ))}
-            <MoreActionsMenu groups={moreActions} disabled={busy} />
-          </div>
-          <ScheduleIndicator onClick={openSchedule} />
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-        {groups.length === 0 &&
-          (filter === 'all' ? (
-            <EmptyState />
-          ) : (
-            <div role="status" className="flex flex-col items-center gap-2 px-5 py-16 text-center">
-              <p className="text-[16px] font-semibold">
-                {filter === 'progress'
-                  ? 'No downloads in progress'
-                  : filter === 'finished'
-                    ? 'No finished downloads'
-                    : 'No downloads need attention'}
-              </p>
-              <Button type="button" variant="secondary" onClick={() => setFilter('all')}>
-                Show all downloads
-              </Button>
-            </div>
-          ))}
-        {groups.map((group) => {
-          const ids = group.items.map((item) => item.id)
-          const all = ids.every((id) => selected.has(id))
-          const some = !all && ids.some((id) => selected.has(id))
-          return (
-            <section key={group.label} aria-label={group.label}>
-              <div className="flex items-center gap-3 border-b-[0.5px] border-border pt-5 pb-3">
-                <Checkbox
-                  aria-label={
-                    group.label === 'Needs attention'
-                      ? 'Select all downloads needing attention'
-                      : `Select all ${group.label.toLowerCase()} downloads`
-                  }
-                  checked={all}
-                  indeterminate={some}
-                  onCheckedChange={(on) => toggle(ids, on)}
-                />
-                <h2 className={groupLabelClass}>
-                  {group.label}
-                  <span className="ml-2.5 tracking-normal">{group.items.length}</span>
-                </h2>
-                <div className="flex-1" />
-                {group.label === 'Finished' && history.length > 0 && (
-                  <button
-                    type="button"
-                    className="text-[12.5px] text-[var(--text-secondary)] hover:text-foreground"
-                    onClick={askClearFinished}
-                  >
-                    Clear finished list
-                  </button>
-                )}
               </div>
-              {group.items.map((item) => (
-                <DownloadContextMenu
-                  key={item.id}
-                  item={item}
-                  selected={selected.has(item.id)}
-                  chosen={chosen}
-                >
-                  <DownloadRow
-                    item={item}
-                    now={now}
-                    selected={selected.has(item.id)}
-                    networkVisual={
-                      isFinished(item) || item.status === 'completed' ? undefined : networkVisual
+            ))}
+          {groups.map((group) => {
+            const ids = group.items.map((item) => item.id)
+            const all = ids.every((id) => selected.has(id))
+            const some = !all && ids.some((id) => selected.has(id))
+            return (
+              <section key={group.label} aria-label={group.label}>
+                <div className="flex items-center gap-3 border-b-[0.5px] border-border pt-5 pb-3">
+                  <Checkbox
+                    aria-label={
+                      group.status === 'failed'
+                        ? 'Select all downloads needing attention'
+                        : `Select all ${group.label.toLowerCase()} downloads`
                     }
-                    onSelect={selectRow}
-                    onOpen={openRow}
-                    onPerform={perform}
+                    checked={all}
+                    indeterminate={some}
+                    onCheckedChange={(on) => toggle(ids, on)}
                   />
-                </DownloadContextMenu>
-              ))}
-            </section>
-          )
-        })}
+                  <h2 className={groupLabelClass}>
+                    {group.label}
+                    <span className="ml-2.5 tracking-normal">{group.items.length}</span>
+                  </h2>
+                  <div className="flex-1" />
+                  {group.status === 'finished' && history.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-[12.5px] text-[var(--text-secondary)] hover:text-foreground"
+                      onClick={askClearFinished}
+                    >
+                      Clear finished list
+                    </button>
+                  )}
+                </div>
+                {group.items.map((item) => (
+                  <DownloadContextMenu
+                    key={item.id}
+                    item={item}
+                    selected={selected.has(item.id)}
+                    chosen={chosen}
+                  >
+                    <DownloadRow
+                      item={item}
+                      now={now}
+                      selected={selected.has(item.id)}
+                      networkVisual={
+                        isFinished(item) || item.status === 'completed' ? undefined : networkVisual
+                      }
+                      onSelect={selectRow}
+                      onOpen={openRow}
+                      onPerform={perform}
+                    />
+                  </DownloadContextMenu>
+                ))}
+              </section>
+            )
+          })}
+        </div>
       </div>
-
       <LimitsDialog
         open={limitsOpen}
         showSchedule={showSchedule}
@@ -436,7 +445,7 @@ const DownloadRow = memo(function DownloadRow({
   const schedule = useAppStore((store) => store.downloadSchedule)
   const [working, setWorking] = useState(false)
   const finished = isFinished(item) || item.status === 'completed'
-  const badge = isFolder(item) ? 'DIR' : fileExtensionBadge(item.fileName)
+  const kind = kindOfDownload(item)
   const wanted = wantedBytes(item)
   const percent = formatPercent(item.bytesDownloaded, wanted)
 
@@ -554,9 +563,7 @@ const DownloadRow = memo(function DownloadRow({
         onClick={() => onOpen(item.id)}
         className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border-[0.5px] border-border bg-card font-mono text-[10px] font-semibold text-muted-foreground">
-          {badge}
-        </div>
+        <FileKindIcon kind={kind} size="lg" icon={isFolder(item) ? Folder : undefined} />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate font-sans text-[14px] leading-tight font-medium">
