@@ -1,6 +1,7 @@
 package tun
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	wun "golang.zx2c4.com/wireguard/tun"
@@ -132,7 +134,76 @@ var strongHost struct {
 	stop    chan struct{}
 }
 
-var strongHostFile = filepath.Join(os.TempDir(), "lychee-netd-weakhost.txt")
+const weakHostDirSDDL = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+
+func weakHostDir() (string, error) {
+	base, err := windows.KnownFolderPath(windows.FOLDERID_ProgramData, 0)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(base, "Lychee")
+	sd, err := windows.SecurityDescriptorFromString(weakHostDirSDDL)
+	if err != nil {
+		return "", err
+	}
+	sa := &windows.SecurityAttributes{SecurityDescriptor: sd}
+	sa.Length = uint32(unsafe.Sizeof(*sa))
+	name, err := windows.UTF16PtrFromString(dir)
+	if err != nil {
+		return "", err
+	}
+	if err := windows.CreateDirectory(name, sa); err != nil && !errors.Is(err, windows.ERROR_ALREADY_EXISTS) {
+		return "", err
+	}
+	fi, err := os.Lstat(dir)
+	if err != nil {
+		return "", err
+	}
+	if !fi.IsDir() || fi.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+		return "", fmt.Errorf("%s is not a plain directory", dir)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		return "", err
+	}
+	if err := windows.SetNamedSecurityInfo(dir, windows.SE_FILE_OBJECT,
+		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, dacl, nil); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func writeWeakHostFile(lines []string) error {
+	dir, err := weakHostDir()
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(dir, weakHostFileName)
+	os.Remove(path)
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+}
+
+func readWeakHostFile() []string {
+	dir, err := weakHostDir()
+	if err != nil {
+		return nil
+	}
+	path := filepath.Join(dir, weakHostFileName)
+	if fi, err := os.Lstat(path); err != nil || !fi.Mode().IsRegular() {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return strings.Split(string(b), "\n")
+}
+
+func removeWeakHostFile() {
+	if dir, err := weakHostDir(); err == nil {
+		os.Remove(filepath.Join(dir, weakHostFileName))
+	}
+}
 
 func startStrongHost(tunIdx int) []string {
 	stop := make(chan struct{})
@@ -183,26 +254,24 @@ func syncStrongHost(stop chan struct{}) []string {
 		return []string{fmt.Sprintf("warning: could not check the adapters' weak host setting: %v", err)}
 	}
 	var notes []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, psLine := range strings.Split(string(out), "\n") {
+		line, ok := weakHostRestoreLine(psLine)
+		if !ok {
+			continue
+		}
 		f := strings.Fields(line)
-		if len(f) != 4 {
-			continue
-		}
-		fam := strings.ToLower(f[0])
-		if fam != "ipv4" && fam != "ipv6" {
-			continue
-		}
-		if err := run("netsh", "interface", fam, "set", "interface", "interface="+f[1],
+		if err := run("netsh", "interface", f[0], "set", "interface", "interface="+f[1],
 			"weakhostsend=disabled", "forwarding=disabled", "store=active"); err != nil {
 			notes = append(notes, fmt.Sprintf("warning: %v", err))
 			continue
 		}
-		strongHost.restore = append(strongHost.restore, fmt.Sprintf("%s %s weakhostsend=%s forwarding=%s",
-			fam, f[1], strings.ToLower(f[2]), strings.ToLower(f[3])))
+		strongHost.restore = append(strongHost.restore, line)
 		notes = append(notes, fmt.Sprintf("note: turned off weak host send and forwarding on adapter %s (%s) while merging; "+
 			"Windows ignores pinned connections there. Sharing its connection (Mobile Hotspot) pauses until merging is off.", f[1], f[0]))
 	}
-	os.WriteFile(strongHostFile, []byte(strings.Join(strongHost.restore, "\n")), 0o600)
+	if err := writeWeakHostFile(strongHost.restore); err != nil {
+		notes = append(notes, fmt.Sprintf("warning: could not save the weak host restore file: %v", err))
+	}
 	return notes
 }
 
@@ -215,22 +284,17 @@ func stopStrongHost() {
 	}
 	putBack(strongHost.restore)
 	strongHost.restore = nil
-	os.Remove(strongHostFile)
+	removeWeakHostFile()
 }
 
 func restoreStrongHost() {
-	b, err := os.ReadFile(strongHostFile)
-	if err != nil {
-		return
-	}
-	putBack(strings.Split(strings.TrimSpace(string(b)), "\n"))
-	os.Remove(strongHostFile)
+	putBack(readWeakHostFile())
+	removeWeakHostFile()
 }
 
 func putBack(lines []string) {
 	for _, l := range lines {
-		f := strings.Fields(l)
-		if len(f) == 4 {
+		if f, ok := parseWeakHostLine(l); ok {
 			run("netsh", "interface", f[0], "set", "interface", "interface="+f[1], f[2], f[3], "store=active")
 		}
 	}
