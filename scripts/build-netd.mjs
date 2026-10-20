@@ -89,8 +89,6 @@ function parseTargets(argv) {
   return out.size ? out : null
 }
 
-// The target a development build runs (helperLocation in src/main/network/merge/elevate.ts reads
-// build/netd/<os>-<arch> when the app is not packaged).
 function hostTarget() {
   const os = { linux: 'linux', darwin: 'mac', win32: 'win' }[process.platform]
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64'

@@ -107,16 +107,12 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
           (line) => console.log(`[lychee-netd] ${line}`)
         ),
     version: app.getVersion(),
-    // Starting the real helper can wait on a password prompt (macOS, pkexec, UAC); the wait ends
-    // early when the prompt is dismissed, as the helper exits then.
     timing: testKnobs.netdControlPath ? undefined : { connectTimeoutMs: HELPER_PROMPT_MS },
     settings: {
       load: async () => (await loadSettings()).merge ?? DEFAULT_MERGE_SETTINGS,
       save: (settings) => saveSettings({ merge: settings })
     },
     push: (state) => {
-      // The helper's TUN adapter is never one of Lychee's networks (plan L-5): hidden by the name
-      // the helper reports for it, as soon as it reports one.
       const tunName = state.tun?.open ? state.tun.name : null
       if (tunName !== reportedTunName) {
         reportedTunName = tunName

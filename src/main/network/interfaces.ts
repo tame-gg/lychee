@@ -115,17 +115,12 @@ export function ipv4Subnet(address: string, netmask: string): string | null {
   return `${subnetParts.join('.')}/${maskBits}`
 }
 
-/** The TUN adapter lychee-netd creates while combining connections (plan L-5): its fixed name on
- * Linux and Windows, its addresses (198.18.0.0/24 and fd6e:6d65:7267::/64 on every OS), and the
- * name the helper reports for it (utunN on macOS). It carries no network of its own, so it is
- * never a download network or shown in the networks menu. */
 export const TUN_INTERFACE_NAME = 'lychee-netd'
 const TUN_IPV4_PREFIX = '198.18.0.'
 const TUN_IPV6_PREFIX = 'fd6e:6d65:7267:'
 
 let reportedTunName: string | null = null
 
-/** The helper's current TUN name (null once it is gone), so the list hides it by name as well. */
 export function setReportedTunName(name: string | null): void {
   reportedTunName = name
 }
@@ -139,8 +134,6 @@ export function isTunAddress(address: string): boolean {
   return lower.startsWith(TUN_IPV4_PREFIX) || lower.startsWith(TUN_IPV6_PREFIX)
 }
 
-/** Drops the helper's TUN adapter: by name, and by its addresses, so that an interface left with
- * none is gone with it. */
 export function withoutTunInterface(list: NetworkInterfaceInfo[]): NetworkInterfaceInfo[] {
   const result: NetworkInterfaceInfo[] = []
   for (const iface of list) {

@@ -2,8 +2,6 @@ appId: gg.tame.lychee
 productName: Lychee
 # Shown in the macOS About window and Finder's Get Info, and in the Windows file properties.
 copyright: Copyright © 2026 Anmol Kapil, © 2026 tame.gg
-# Compiles lychee-netd for the target being packaged (build/netd/<os>-<arch>), then checks that the
-# package holds it and no unused WebRTC binary.
 beforePack: scripts/before-pack.mjs
 afterPack: scripts/after-pack.mjs
 directories:
@@ -23,7 +21,6 @@ files:
   - '!node_modules/node-datachannel/**'
   - '!node_modules/webrtc-polyfill/**'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-  # The helper's Go sources; its binary ships under resources/helper (extraResources below).
   - '!native/**'
   # The Playwright suite and its config are development-only (e2e/netd/ holds the fake network
   # helper the tests talk to); nothing in the app loads them.
@@ -41,9 +38,7 @@ extraResources:
     to: licenses/lightning-LICENSE.txt
 win:
   # Wintun (wintun.dll) ships only in Windows builds, and its license must ship with it.
-  # electron-builder adds this to the top-level extraResources above. The network helper
-  # (lychee-netd, built by scripts/before-pack.mjs into build/netd/<os>-<arch>) ships under
-  # resources/helper on every OS; there is no ${os} macro, so each OS names its own folder.
+  # electron-builder adds this to the top-level extraResources above.
   extraResources:
     - from: build/licenses/wintun-LICENSE.txt
       to: licenses/wintun-LICENSE.txt
@@ -73,7 +68,6 @@ mac:
   extraResources:
     - from: build/netd/mac-${arch}
       to: helper
-  # Signed along with the app, so a Developer ID build's helper passes hardened runtime checks.
   binaries:
     - Contents/Resources/helper/lychee-netd
   target:
@@ -128,9 +122,6 @@ linux:
   mimeTypes: [x-scheme-handler/magnet, application/x-bittorrent, x-scheme-handler/lychee]
 appImage:
   artifactName: ${name}-${version}-${arch}.${ext}
-# deb and rpm install a root-owned copy of the helper at /usr/lib/lychee/lychee-netd with
-# CAP_NET_ADMIN, on every install and upgrade (replacing the file drops its capabilities). The
-# scripts repeat electron-builder's own post-install steps, which a custom script replaces.
 deb:
   afterInstall: build/linux/after-install.sh
   afterRemove: build/linux/after-remove.sh

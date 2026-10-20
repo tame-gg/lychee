@@ -167,9 +167,6 @@ export function appleScriptString(text: string): string {
   return `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
-/** What runs as root after the administrator password: a root-owned copy of the bundled helper
- * when there is none or it is not Lychee's version, then the helper itself, told which user
- * may connect (the helper reads SUDO_UID, as under sudo). Paths are quoted for /bin/sh. */
 export function macAdminShellScript(options: {
   bundled: string
   install: boolean
@@ -200,8 +197,6 @@ export function macAdminAppleScript(shell: string): string {
 
 const OSASCRIPT_ERROR = /execution error:\s*([\s\S]*?)\s*\((-?\d+)\)$/
 
-/** osascript exits 1 for any failing script and reports the shell's exit status (or -128 for a
- * dismissed password prompt) at the end of its stderr; that status is the helper's. */
 export function osascriptOutcome(
   exit: HelperExit,
   stderr: string
@@ -483,9 +478,6 @@ export class NativeLauncher implements Launcher {
     return failed(status, message)
   }
 
-  /** The root-owned copy in /Library/PrivilegedHelperTools runs through the passwordless sudo
-   * rule where one is set up (plan section 4), else through one administrator prompt per
-   * Lychee session, which also installs or updates the copy from the bundled helper first. */
   private async launchDarwin(bundled: string): Promise<LaunchResult> {
     const args = [MAC_HELPER, 'serve', '--control', MAC_CONTROL]
     const installed = await reportedVersion(MAC_HELPER, this.env.env)
