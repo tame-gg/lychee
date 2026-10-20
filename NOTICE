@@ -8,6 +8,8 @@ net-merge by Rohit Mahto (MIT): the network-merging helper, bundled as a separat
 https://github.com/rohit267/net-merge
 Copyright (c) 2026 Rohit Mahto
 License text: build/licenses/net-merge-LICENSE.txt
+lychee-netd (native/netd) is derived from net-merge; the verbatim license text is also
+kept at native/netd/LICENSE-net-merge.
 
 Wintun by WireGuard LLC (Prebuilt Binaries License): the wintun.dll virtual network
 adapter driver that net-merge uses on Windows. Used unmodified, only through the API in
