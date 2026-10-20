@@ -6,6 +6,7 @@ import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useDownloadEvents } from './hooks/useDownloadEvents'
+import { useMergeEvents } from './hooks/useMerge'
 import { useNetworkEvents } from './hooks/useNetworks'
 import { useNewDownloadShortcuts, useOpenedLinks } from './hooks/useOpenedLinks'
 import { CompleteScreen } from './screens/CompleteScreen'
@@ -43,6 +44,7 @@ function App(): React.JSX.Element {
   useOpenedLinks()
   useNewDownloadShortcuts()
   useNetworkEvents()
+  useMergeEvents()
 
   const downloads = useAppStore((store) => store.downloads)
   const history = useAppStore((store) => store.history)

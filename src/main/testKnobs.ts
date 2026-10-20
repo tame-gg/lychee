@@ -15,6 +15,7 @@ export const testKnobs = {
   userDataDir: env['LYCHEE_USER_DATA'],
   /** Keeps the window off-screen so a test run doesn't pop windows up over the desktop. */
   hideWindow: env['LYCHEE_E2E_HIDE_WINDOW'] === '1',
+  netdControlPath: env['LYCHEE_E2E_NETD'] || undefined,
   blockBytes: positiveNumber('LYCHEE_E2E_BLOCK_BYTES', 8 * 1024 * 1024),
   retryBaseDelayMs: positiveNumber('LYCHEE_E2E_RETRY_BASE_MS', 1000),
   stallTimeoutMs: positiveNumber('LYCHEE_E2E_STALL_MS', 20_000),

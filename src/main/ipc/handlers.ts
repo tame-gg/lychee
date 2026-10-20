@@ -1,5 +1,6 @@
 import { stat, statfs } from 'node:fs/promises'
 import {
+  app,
   clipboard,
   dialog,
   ipcMain,
@@ -11,6 +12,7 @@ import {
 } from 'electron'
 import { IpcChannels } from '../../shared/ipc-channels'
 import type { IpcContract } from '../../shared/ipc-contract'
+import { DEFAULT_MERGE_SETTINGS } from '../../shared/mergeSettings'
 import {
   DEFAULT_SLOW_MODE_SPEED,
   DOWNLOADS_AT_ONCE,
@@ -22,9 +24,12 @@ import { getDefaultDownloadsDir, getHomeDir } from '../download/paths'
 import { listHistory } from '../download/history'
 import { probeUrl } from '../download/probe'
 import { deviceBindingSupported } from '../network/deviceBinding'
+import { connectOnlyLauncher, NativeLauncher } from '../network/merge/elevate'
+import { MergeController } from '../network/merge/mergeController'
 import { pendingLink, pendingLinks, releaseLink } from '../openLinks'
 import { NetworkMonitor } from '../network/interfaces'
 import { loadSettings, saveSettings } from '../settings'
+import { testKnobs } from '../testKnobs'
 import { showUpdateMenu, updateState } from '../updater'
 import { setInterfaceSize } from '../windowZoom'
 
@@ -70,7 +75,12 @@ async function freeSpace(dir: string): Promise<number | null> {
   }
 }
 
-export function registerIpcHandlers(getWindow: () => BrowserWindow | null): DownloadManager {
+export interface RegisteredHandlers {
+  manager: DownloadManager
+  merge: MergeController
+}
+
+export function registerIpcHandlers(getWindow: () => BrowserWindow | null): RegisteredHandlers {
   // The main process keeps the network list, for downloads and the window alike.
   const networks = new NetworkMonitor((list) => {
     manager.networksChanged()
@@ -78,6 +88,36 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
     if (window && !window.isDestroyed()) window.webContents.send(IpcChannels.networksChanged, list)
   })
   const manager = new DownloadManager(getWindow, networks)
+  const merge = new MergeController({
+    launcher: testKnobs.netdControlPath
+      ? connectOnlyLauncher(testKnobs.netdControlPath)
+      : new NativeLauncher(
+          {
+            platform: process.platform,
+            arch: process.arch,
+            version: app.getVersion(),
+            packaged: app.isPackaged,
+            resourcesPath: process.resourcesPath,
+            appRoot: app.getAppPath(),
+            env: process.env
+          },
+          (line) => console.log(`[lychee-netd] ${line}`)
+        ),
+    version: app.getVersion(),
+    settings: {
+      load: async () => (await loadSettings()).merge ?? DEFAULT_MERGE_SETTINGS,
+      save: (settings) => saveSettings({ merge: settings })
+    },
+    push: (state) => {
+      const window = getWindow()
+      if (window && !window.isDestroyed())
+        window.webContents.send(IpcChannels.mergeStateChanged, state)
+    },
+    log: (line) => console.log(`[lychee-netd] ${line}`)
+  })
+  void merge
+    .start()
+    .catch((error) => console.error('[lychee] network helper failed to start', error))
   // Waking from sleep, the networks may have changed without a poll in between to see it.
   powerMonitor.on('resume', () => {
     manager.systemResumed()
@@ -139,7 +179,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         speedUnit: settings.speedUnit ?? 'bytes',
         interfaceSize: settings.interfaceSize ?? 'auto',
         sidebarCollapsed: settings.sidebarCollapsed ?? false,
-        destinationDir: destinationExists ? destinationDir : undefined
+        destinationDir: destinationExists ? destinationDir : undefined,
+        merge: settings.merge ?? DEFAULT_MERGE_SETTINGS
       } satisfies InitialState
     } catch (error) {
       console.error('[lychee] failed to read initial state', error)
@@ -154,7 +195,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
         slowModeSpeed: DEFAULT_SLOW_MODE_SPEED,
         speedUnit: 'bytes',
         interfaceSize: 'auto',
-        sidebarCollapsed: false
+        sidebarCollapsed: false,
+        merge: DEFAULT_MERGE_SETTINGS
       } satisfies InitialState
     }
   })
@@ -254,5 +296,12 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Down
   handle('updateState', () => updateState())
   handle('showUpdateMenu', () => showUpdateMenu())
 
-  return manager
+  handle('mergeState', () => merge.state())
+  handle('setMerging', (_event, on) => merge.setMerging(on === true))
+  handle('setMergeOptions', (_event, patch) => merge.setOptions(patch ?? {}))
+  handle('setMergeNetwork', (_event, id, enabled) => merge.setNetwork(id, enabled === true))
+  handle('setMergeWeight', (_event, id, weight) => merge.setWeight(id, weight))
+  handle('repairNetwork', () => merge.repair())
+
+  return { manager, merge }
 }

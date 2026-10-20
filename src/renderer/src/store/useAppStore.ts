@@ -1,4 +1,5 @@
 import { applyDownloadUpdate } from '@shared/downloadUpdate'
+import { initialMergeState } from '@shared/mergeSettings'
 import type {
   AppSettings,
   DownloadSchedule,
@@ -6,6 +7,8 @@ import type {
   DownloadUpdate,
   FinishedDownload,
   InterfaceSize,
+  MergeOptionsPatch,
+  MergeState,
   NetworkInterfaceInfo,
   NetworkPreference,
   NetworkPreferences,
@@ -105,6 +108,13 @@ interface AppStore {
   setInterfaceSize: (size: InterfaceSize) => void
   setDraftUrl: (url: string) => void
   setDestinationDir: (dir: string) => void
+
+  merging: MergeState
+  receiveMergeState: (state: MergeState) => void
+  setMerging: (on: boolean) => void
+  setMergeOptions: (patch: MergeOptionsPatch) => void
+  setMergeNetwork: (id: string, enabled: boolean) => void
+  setMergeWeight: (id: string, weight: number | 'auto') => void
 }
 
 // Settings saved by the main process, read once before the first paint (see InitialState).
@@ -295,5 +305,39 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setDestinationDir: (destinationDir) => {
     set({ destinationDir })
     persist({ destinationDir })
+  },
+
+  merging: initialMergeState(initial.merge),
+  receiveMergeState: (merging) => {
+    if (merging.seq < get().merging.seq) return
+    set({ merging })
+  },
+  setMerging: (on) => {
+    const { merging } = get()
+    set({ merging: { ...merging, settings: { ...merging.settings, enabled: on } } })
+    void window.lychee.setMerging(on).catch(() => {})
+  },
+  setMergeOptions: (patch) => {
+    const { merging } = get()
+    const settings = { ...merging.settings }
+    if (patch.ipv6 !== undefined) settings.ipv6 = patch.ipv6
+    if (patch.autoPause !== undefined) settings.autoPause = patch.autoPause
+    set({ merging: { ...merging, settings } })
+    void window.lychee.setMergeOptions(patch).catch(() => {})
+  },
+  setMergeNetwork: (id, enabled) => {
+    const { merging } = get()
+    const excluded = merging.settings.excluded.filter((name) => name !== id)
+    if (!enabled) excluded.push(id)
+    set({ merging: { ...merging, settings: { ...merging.settings, excluded } } })
+    void window.lychee.setMergeNetwork(id, enabled).catch(() => {})
+  },
+  setMergeWeight: (id, weight) => {
+    const { merging } = get()
+    const weights = { ...merging.settings.weights }
+    if (weight === 'auto') delete weights[id]
+    else weights[id] = weight
+    set({ merging: { ...merging, settings: { ...merging.settings, weights } } })
+    void window.lychee.setMergeWeight(id, weight).catch(() => {})
   }
 }))

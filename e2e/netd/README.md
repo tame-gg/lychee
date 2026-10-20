@@ -2,9 +2,10 @@
 
 A TypeScript fake of the privileged network helper `lychee-netd serve --control <path>`, speaking the
 control channel of [`docs/netd-control-channel.md`](../../docs/netd-control-channel.md) over a real
-Unix socket or Windows named pipe. It exists so the future IPC client
-(`src/main/network/merge/netdClient.ts`, plan item L-3) can be tested against exact, scripted frames
-without a Go toolchain, a TUN adapter, or any privilege.
+Unix socket or Windows named pipe. It exists so the IPC client
+(`src/main/network/merge/netdClient.ts`) and the controller above it (`mergeController.ts`, plan
+item L-3) can be tested against exact, scripted frames without a Go toolchain, a TUN adapter, or any
+privilege.
 
 **It is not shipped.** `electron-builder.yml` excludes `e2e/**`; the asar contains none of it. It is
 also **not** the real client — the client is written against this fake, not the other way round.
@@ -110,12 +111,25 @@ exposes the raw outcome; it does not decide "needs admin" vs "unavailable".
 
 ```bash
 LYCHEE_E2E_SKIP_BUILD=1 npx playwright test e2e/netdFakeAppendixB.spec.ts \
-  e2e/netdFakeFraming.spec.ts e2e/netdFakeCommands.spec.ts e2e/netdFakeScripting.spec.ts
+  e2e/netdFakeFraming.spec.ts e2e/netdFakeCommands.spec.ts e2e/netdFakeScripting.spec.ts \
+  e2e/netdClient.spec.ts e2e/mergeController.spec.ts
 ```
 
 `LYCHEE_E2E_SKIP_BUILD=1` is required: these specs are pure Node and must not trigger the Electron
 build that `playwright.config.ts`'s global setup otherwise runs. Add `--repeat-each=5` to check for
 flakiness (there is none; the fake clock makes them deterministic).
+
+`netdClient.spec.ts` drives the real client against the fake, including a replay of Appendix B that
+checks the frames the client sends and receives byte for byte. `mergeController.spec.ts` drives the
+controller with `fakeNetdLaunch` standing in for the launcher: launch outcomes, settings
+re-application, reconnects within the grace period, crashes and shutdown.
+
+## The app against the fake
+
+`e2e/merge.spec.ts` runs the built app with `LYCHEE_E2E_NETD=<control path>`: the app then connects
+to the fake listening there instead of launching a helper (the knob is ignored by a packaged build,
+like every other `testKnobs` entry). The fake must report the app's own `package.json` version as
+`helperVersion`, or the app refuses it as out of date.
 
 Spec-ambiguity decisions are written up in `notes/fakenetd-ambiguities.md`, kept outside the repo
 under the `s1/` work root (sibling of this checkout), alongside this task's planning notes.
