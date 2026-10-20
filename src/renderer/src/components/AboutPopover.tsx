@@ -1,9 +1,12 @@
 import { INTERFACE_SIZES } from '@shared/types'
 import { useAppStore } from '../store/useAppStore'
+import { LycheeMark } from './LycheeMark'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group'
 
 const PLEXO_URL = 'https://github.com/anmolkapil/plexo'
+const TAME_URL = 'https://tame.gg'
+const REPO_URL = 'https://github.com/tame-gg/lychee'
 
 /** Auto, or a fixed zoom for the window's content (see main/interfaceZoom.ts). Set once, so it
  * lives here rather than in the status bar with the toggles flipped day to day. */
@@ -61,8 +64,32 @@ export function AboutPopover(): React.JSX.Element {
         About
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[280px] gap-1.5 text-[12.5px]">
-        <div className="text-[14px] font-semibold">Lychee</div>
-        <div className="text-muted-foreground">A tame.gg project.</div>
+        <div className="font-serif text-[20px] leading-[24px] font-normal text-muted-foreground">
+          A{' '}
+          <a
+            href={TAME_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-foreground decoration-1 underline-offset-[3px] hover:underline"
+          >
+            tame<span className="tame-gg">.gg</span>
+          </a>{' '}
+          project
+        </div>
+        <div className="mt-1 flex items-center gap-2.5">
+          <LycheeMark size={40} className="shrink-0" />
+          <div className="flex flex-col">
+            <div className="text-[14px] font-semibold">Lychee</div>
+            <div className="font-mono text-[11.5px] text-muted-foreground">
+              Version {__APP_VERSION__}
+            </div>
+          </div>
+        </div>
+        <div>
+          <a href={REPO_URL} target="_blank" rel="noreferrer" className="underline">
+            Source on GitHub
+          </a>
+        </div>
         <div>
           Based on{' '}
           <a href={PLEXO_URL} target="_blank" rel="noreferrer" className="underline">
