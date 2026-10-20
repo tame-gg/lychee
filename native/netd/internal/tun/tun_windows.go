@@ -93,8 +93,22 @@ func delRoutes(idx int) {
 	}
 }
 
+var system32 = sync.OnceValues(windows.GetSystemDirectory)
+
+func systemTool(rel string) (string, error) {
+	dir, err := system32()
+	if err != nil {
+		return "", fmt.Errorf("locate %s: %w", rel, err)
+	}
+	return filepath.Join(dir, rel), nil
+}
+
 func run(name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+	exe, err := systemTool(name + ".exe")
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -246,10 +260,16 @@ func syncStrongHost(stop chan struct{}) []string {
 		return nil
 	}
 
-	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+	powershell, err := systemTool(`WindowsPowerShell\v1.0\powershell.exe`)
+	if err != nil {
+		return []string{fmt.Sprintf("warning: could not check the adapters' weak host setting: %v", err)}
+	}
+	cmd := exec.Command(powershell, "-NoProfile", "-NonInteractive", "-Command",
 		"Get-NetIPInterface -InterfaceIndex "+strings.Join(idx, ",")+" -ErrorAction SilentlyContinue | "+
 			"Where-Object { $_.WeakHostSend -eq 'Enabled' -or $_.Forwarding -eq 'Enabled' } | "+
-			"ForEach-Object { '{0} {1} {2} {3}' -f $_.AddressFamily, $_.InterfaceIndex, $_.WeakHostSend, $_.Forwarding }").Output()
+			"ForEach-Object { '{0} {1} {2} {3}' -f $_.AddressFamily, $_.InterfaceIndex, $_.WeakHostSend, $_.Forwarding }")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	out, err := cmd.Output()
 	if err != nil {
 		return []string{fmt.Sprintf("warning: could not check the adapters' weak host setting: %v", err)}
 	}
