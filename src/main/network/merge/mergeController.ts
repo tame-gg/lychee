@@ -171,6 +171,10 @@ export class MergeController {
     }
   }
 
+  pushState(): void {
+    this.pushSoon(true)
+  }
+
   async setMerging(on: boolean): Promise<void> {
     if (this.shuttingDown) return
     await this.saveSettings({ ...this.settings, enabled: on })

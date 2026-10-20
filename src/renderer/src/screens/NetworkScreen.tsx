@@ -58,6 +58,7 @@ export function NetworkScreen(): React.JSX.Element {
   const setMergeOptions = useAppStore((store) => store.setMergeOptions)
   const setMergeNetwork = useAppStore((store) => store.setMergeNetwork)
   const setMergeWeight = useAppStore((store) => store.setMergeWeight)
+  const mergeError = useAppStore((store) => store.mergeError)
   const formatSpeed = useFormatSpeed()
   const networkVisual = useNetworkVisuals()
   const [repair, setRepair] = useState<{ busy: boolean; error: string | null }>({
@@ -86,6 +87,7 @@ export function NetworkScreen(): React.JSX.Element {
     ? formatSpeed(merging.totals!.link_in_bps).split(' ')
     : ['—', undefined]
   const problem = status.tone === 'attention' || status.tone === 'error'
+  const error = repair.error ?? mergeError
 
   const runRepair = (): void => {
     setRepair({ busy: true, error: null })
@@ -196,20 +198,20 @@ export function NetworkScreen(): React.JSX.Element {
         </div>
       </HeroBand>
 
-      {(status.hint || repair.error) && (
+      {(status.hint || error) && (
         <div
-          role={problem || repair.error ? 'alert' : 'status'}
+          role={problem || error ? 'alert' : 'status'}
           className={`flex items-start gap-2 border-b-[0.5px] border-border px-5 py-2.5 text-[12px] leading-[1.4] ${
-            problem || repair.error ? 'text-foreground' : 'text-muted-foreground'
+            problem || error ? 'text-foreground' : 'text-muted-foreground'
           }`}
         >
-          {(problem || repair.error) && (
+          {(problem || error) && (
             <AlertTriangle
               aria-hidden
-              className={`mt-px size-3.5 shrink-0 ${status.tone === 'error' || repair.error ? 'text-destructive' : 'text-[var(--swatch-amber)]'}`}
+              className={`mt-px size-3.5 shrink-0 ${status.tone === 'error' || error ? 'text-destructive' : 'text-[var(--swatch-amber)]'}`}
             />
           )}
-          <span>{repair.error ?? status.hint}</span>
+          <span>{error ?? status.hint}</span>
         </div>
       )}
       {merging.status === 'off' && !merging.helper && (
@@ -310,7 +312,7 @@ export function NetworkScreen(): React.JSX.Element {
           type="button"
           size="sm"
           variant="secondary"
-          disabled={!merging.helper || merging.helperState !== 'off' || repair.busy}
+          disabled={(merging.helper !== null && merging.helperState !== 'off') || repair.busy}
           onClick={runRepair}
         >
           {repair.busy ? 'Repairing…' : 'Repair network settings'}
