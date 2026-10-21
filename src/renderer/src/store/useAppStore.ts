@@ -1,4 +1,5 @@
 import { applyDownloadUpdate } from '@shared/downloadUpdate'
+import { describeError } from '@shared/errors'
 import { initialMergeState } from '@shared/mergeSettings'
 import type {
   AppSettings,
@@ -8,8 +9,10 @@ import type {
   FinishedDownload,
   InterfaceSize,
   MergeOptionsPatch,
+  MergeSettings,
   MergeState,
   NetworkInterfaceInfo,
+  NetworkPageMode,
   NetworkPreference,
   NetworkPreferences,
   PendingLink,
@@ -18,13 +21,14 @@ import type {
 } from '@shared/types'
 import { create } from 'zustand'
 import type { FileKind } from '../utils/fileKind'
+import { selectMergeBackend } from '../merge/mergeBackend'
 
 export type DownloadFilter = 'all' | 'downloading' | 'queued' | 'paused' | 'failed' | 'finished'
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'error'
 
-/** What the window shows: the list of downloads, or one download. */
-export type View = { name: 'list' } | { name: 'download'; id: string }
+/** What the window shows: the list of downloads, one download, or the Network page. */
+export type View = { name: 'list' } | { name: 'download'; id: string } | { name: 'network' }
 
 interface AppStore {
   interfaces: NetworkInterfaceInfo[]
@@ -109,7 +113,11 @@ interface AppStore {
   setDraftUrl: (url: string) => void
   setDestinationDir: (dir: string) => void
 
+  /** Whether the sidebar offers the Network page, and what drives it (see NetworkPageMode). */
+  networkPage: NetworkPageMode
   merging: MergeState
+  /** Why the last change on the Network page didn't take, until the next one. */
+  mergeError: string | null
   receiveMergeState: (state: MergeState) => void
   setMerging: (on: boolean) => void
   setMergeOptions: (patch: MergeOptionsPatch) => void
@@ -125,6 +133,23 @@ const initial = window.lychee.initialState
  * the change isn't remembered next launch. */
 function persist(patch: AppSettings): void {
   window.lychee.updateSettings(patch).catch(() => {})
+}
+
+/** The helper through window.lychee, or its simulation when the Network page runs on one. */
+export const mergeBackend = selectMergeBackend(initial.networkPage, initial.merge)
+
+/** Shows `settings` at once, like persist; if the command fails they go back to what they were,
+ * unless the merge state moved on meanwhile (main pushes a fresh one after a failed command). */
+function sendMergeChange(settings: MergeSettings, command: () => Promise<void>): void {
+  const before = useAppStore.getState().merging
+  useAppStore.setState({ merging: { ...before, settings }, mergeError: null })
+  command().catch((error: unknown) => {
+    const current = useAppStore.getState().merging
+    useAppStore.setState({
+      merging: current.seq === before.seq ? { ...current, settings: before.settings } : current,
+      mergeError: describeError(error)
+    })
+  })
 }
 
 /** Links let go here: a listing main sent before it heard so would bring them back. */
@@ -307,37 +332,34 @@ export const useAppStore = create<AppStore>((set, get) => ({
     persist({ destinationDir })
   },
 
+  networkPage: initial.networkPage,
   merging: initialMergeState(initial.merge),
+  mergeError: null,
   receiveMergeState: (merging) => {
     if (merging.seq < get().merging.seq) return
     set({ merging })
   },
   setMerging: (on) => {
-    const { merging } = get()
-    set({ merging: { ...merging, settings: { ...merging.settings, enabled: on } } })
-    void window.lychee.setMerging(on).catch(() => {})
+    const { settings } = get().merging
+    sendMergeChange({ ...settings, enabled: on }, () => mergeBackend.setMerging(on))
   },
   setMergeOptions: (patch) => {
-    const { merging } = get()
-    const settings = { ...merging.settings }
+    const settings = { ...get().merging.settings }
     if (patch.ipv6 !== undefined) settings.ipv6 = patch.ipv6
     if (patch.autoPause !== undefined) settings.autoPause = patch.autoPause
-    set({ merging: { ...merging, settings } })
-    void window.lychee.setMergeOptions(patch).catch(() => {})
+    sendMergeChange(settings, () => mergeBackend.setMergeOptions(patch))
   },
   setMergeNetwork: (id, enabled) => {
-    const { merging } = get()
-    const excluded = merging.settings.excluded.filter((name) => name !== id)
+    const { settings } = get().merging
+    const excluded = settings.excluded.filter((name) => name !== id)
     if (!enabled) excluded.push(id)
-    set({ merging: { ...merging, settings: { ...merging.settings, excluded } } })
-    void window.lychee.setMergeNetwork(id, enabled).catch(() => {})
+    sendMergeChange({ ...settings, excluded }, () => mergeBackend.setMergeNetwork(id, enabled))
   },
   setMergeWeight: (id, weight) => {
-    const { merging } = get()
-    const weights = { ...merging.settings.weights }
+    const { settings } = get().merging
+    const weights = { ...settings.weights }
     if (weight === 'auto') delete weights[id]
     else weights[id] = weight
-    set({ merging: { ...merging, settings: { ...merging.settings, weights } } })
-    void window.lychee.setMergeWeight(id, weight).catch(() => {})
+    sendMergeChange({ ...settings, weights }, () => mergeBackend.setMergeWeight(id, weight))
   }
 }))

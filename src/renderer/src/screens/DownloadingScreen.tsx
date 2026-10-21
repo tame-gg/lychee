@@ -1,6 +1,7 @@
 import { SPEED_HISTORY_SECONDS, type DownloadState } from '@shared/types'
 import { AlertTriangle, Folder } from 'lucide-react'
 import { memo, useEffect, useState } from 'react'
+import { BigStat } from '../components/BigStat'
 import { BlockGrid } from '../components/BlockGrid'
 import { ColorBadge } from '../components/ColorBadge'
 import { CombineDiagram } from '../components/CombineDiagram'
@@ -45,43 +46,6 @@ function InlineStat({ label, value }: { label: string; value: string }): React.J
     <span>
       {label} <span className="font-semibold text-foreground">{value}</span>
     </span>
-  )
-}
-
-/** The hero band's headline figure: a tracked-out label over one big tabular number and its unit. */
-function BigStat({
-  label,
-  value,
-  unit,
-  valueClass,
-  note
-}: {
-  label: string
-  value: string | number
-  unit?: string
-  valueClass: string
-  /** Beside the label, e.g. a warning about what holds the value down. */
-  note?: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <>
-      <div className="flex items-center gap-1.5 font-mono text-[10px] leading-none font-medium tracking-[0.2em] text-muted-foreground">
-        {label}
-        {note}
-      </div>
-      <div className="flex items-baseline gap-[7px]">
-        <div
-          className={`font-serif text-[44px] leading-[0.88] font-normal tracking-[-0.01em] tabular-nums ${valueClass}`}
-        >
-          {value}
-        </div>
-        {unit && (
-          <div className="font-mono text-[12px] leading-none font-medium text-muted-foreground">
-            {unit}
-          </div>
-        )}
-      </div>
-    </>
   )
 }
 

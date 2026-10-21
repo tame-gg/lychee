@@ -190,7 +190,9 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
         interfaceSize: settings.interfaceSize ?? 'auto',
         sidebarCollapsed: settings.sidebarCollapsed ?? false,
         destinationDir: destinationExists ? destinationDir : undefined,
-        merge: settings.merge ?? DEFAULT_MERGE_SETTINGS
+        merge: settings.merge ?? DEFAULT_MERGE_SETTINGS,
+        networkPage:
+          testKnobs.networkPage ?? (settings.showNetworkPage === false ? 'off' : 'helper')
       } satisfies InitialState
     } catch (error) {
       console.error('[lychee] failed to read initial state', error)
@@ -206,7 +208,8 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
         speedUnit: 'bytes',
         interfaceSize: 'auto',
         sidebarCollapsed: false,
-        merge: DEFAULT_MERGE_SETTINGS
+        merge: DEFAULT_MERGE_SETTINGS,
+        networkPage: testKnobs.networkPage ?? 'helper'
       } satisfies InitialState
     }
   })
@@ -307,10 +310,17 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
   handle('showUpdateMenu', () => showUpdateMenu())
 
   handle('mergeState', () => merge.state())
-  handle('setMerging', (_event, on) => merge.setMerging(on === true))
-  handle('setMergeOptions', (_event, patch) => merge.setOptions(patch ?? {}))
-  handle('setMergeNetwork', (_event, id, enabled) => merge.setNetwork(id, enabled === true))
-  handle('setMergeWeight', (_event, id, weight) => merge.setWeight(id, weight))
+  const pushOnFailure = (command: Promise<void>): Promise<void> =>
+    command.catch((error: unknown) => {
+      merge.pushState()
+      throw error
+    })
+  handle('setMerging', (_event, on) => pushOnFailure(merge.setMerging(on === true)))
+  handle('setMergeOptions', (_event, patch) => pushOnFailure(merge.setOptions(patch ?? {})))
+  handle('setMergeNetwork', (_event, id, enabled) =>
+    pushOnFailure(merge.setNetwork(id, enabled === true))
+  )
+  handle('setMergeWeight', (_event, id, weight) => pushOnFailure(merge.setWeight(id, weight)))
   handle('repairNetwork', () => merge.repair())
 
   return { manager, merge }
