@@ -115,6 +115,36 @@ export function ipv4Subnet(address: string, netmask: string): string | null {
   return `${subnetParts.join('.')}/${maskBits}`
 }
 
+export const TUN_INTERFACE_NAME = 'lychee-netd'
+const TUN_IPV4_PREFIX = '198.18.0.'
+const TUN_IPV6_PREFIX = 'fd6e:6d65:7267:'
+
+let reportedTunName: string | null = null
+
+export function setReportedTunName(name: string | null): void {
+  reportedTunName = name
+}
+
+export function isTunInterfaceName(name: string): boolean {
+  return name === TUN_INTERFACE_NAME || (reportedTunName !== null && name === reportedTunName)
+}
+
+export function isTunAddress(address: string): boolean {
+  const lower = address.toLowerCase()
+  return lower.startsWith(TUN_IPV4_PREFIX) || lower.startsWith(TUN_IPV6_PREFIX)
+}
+
+export function withoutTunInterface(list: NetworkInterfaceInfo[]): NetworkInterfaceInfo[] {
+  const result: NetworkInterfaceInfo[] = []
+  for (const iface of list) {
+    if (isTunInterfaceName(iface.id) || isTunInterfaceName(iface.device)) continue
+    const addresses = iface.addresses.filter((addr) => !isTunAddress(addr.address))
+    if (addresses.length === 0) continue
+    result.push(addresses.length === iface.addresses.length ? iface : { ...iface, addresses })
+  }
+  return result
+}
+
 /** What the OS calls each device, looked up again only when the set of devices changes: it
  * takes a child process, while the addresses themselves are one cheap system call. */
 let labels: {
@@ -127,7 +157,7 @@ let labels: {
  */
 export async function listActiveInterfaces(): Promise<NetworkInterfaceInfo[]> {
   const overridden = testInterfaces()
-  if (overridden) return overridden
+  if (overridden) return withoutTunInterface(overridden)
 
   const all = networkInterfaces()
   const devices = Object.keys(all).sort().join('\n')
@@ -138,14 +168,15 @@ export async function listActiveInterfaces(): Promise<NetworkInterfaceInfo[]> {
   const result: NetworkInterfaceInfo[] = []
 
   for (const [device, addresses] of Object.entries(all)) {
-    if (!addresses) continue
+    if (!addresses || isTunInterfaceName(device)) continue
     const usable: NetworkAddress[] = addresses
       .filter(
         (addr) =>
           !addr.internal &&
           (addr.family === 'IPv4' || addr.family === 'IPv6') &&
           !addr.address.startsWith('169.254.') &&
-          !addr.address.toLowerCase().startsWith('fe80:')
+          !addr.address.toLowerCase().startsWith('fe80:') &&
+          !isTunAddress(addr.address)
       )
       .map((addr) => ({
         address: addr.address,

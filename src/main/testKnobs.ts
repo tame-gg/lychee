@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { isIP } from 'node:net'
-import type { NetworkInterfaceInfo } from '../shared/types'
+import type { NetworkInterfaceInfo, NetworkPageMode } from '../shared/types'
 
 // Overrides for the end-to-end suite (e2e/), read from the environment. A packaged build ignores
 // all of them, so a shipped app can't be steered through its environment variables.
@@ -11,10 +11,21 @@ function positiveNumber(name: string, fallback: number): number {
   return value > 0 ? value : fallback
 }
 
+function networkPageMode(value: string | undefined): NetworkPageMode | undefined {
+  if (value === '1' || value === 'helper') return 'helper'
+  if (value === 'mock' || value?.startsWith('mock:')) return value as NetworkPageMode
+  if (value === '0' || value === 'off') return 'off'
+  return undefined
+}
+
 export const testKnobs = {
   userDataDir: env['LYCHEE_USER_DATA'],
   /** Keeps the window off-screen so a test run doesn't pop windows up over the desktop. */
   hideWindow: env['LYCHEE_E2E_HIDE_WINDOW'] === '1',
+  netdControlPath: env['LYCHEE_E2E_NETD'] || undefined,
+  /** `LYCHEE_NETWORK_PAGE=1` shows the Network page; `mock` (or `mock:<status>`, e.g.
+   * `mock:not_installed`) drives it from a simulation instead of the helper. */
+  networkPage: networkPageMode(env['LYCHEE_NETWORK_PAGE']),
   blockBytes: positiveNumber('LYCHEE_E2E_BLOCK_BYTES', 8 * 1024 * 1024),
   retryBaseDelayMs: positiveNumber('LYCHEE_E2E_RETRY_BASE_MS', 1000),
   stallTimeoutMs: positiveNumber('LYCHEE_E2E_STALL_MS', 20_000),

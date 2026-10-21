@@ -50,6 +50,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/netd/go.mod
+          cache-dependency-path: native/netd/go.sum
+
       # Without the certificate secrets the Mac build is ad-hoc signed (electron-builder.yml), and
       # can't update itself; with them it's Developer ID signed, and notarized too with the API key
       # ones. electron-builder's own CSC_LINK import, as documented; it needs 26.16.1+, before which

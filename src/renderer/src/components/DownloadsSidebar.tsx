@@ -1,8 +1,9 @@
 import { cn } from 'cn'
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Network, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useAppStore, type DownloadFilter } from '../store/useAppStore'
 import type { ListCounts } from '../utils/downloadList'
 import { FILE_KINDS, type FileKind } from '../utils/fileKind'
+import { mergeStatusView, mergeToneColor } from '../utils/merge'
 import { FileKindIcon } from './FileKindIcon'
 import { STATUS_ENTRIES } from './statusEntries'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip'
@@ -17,7 +18,8 @@ function Item({
 }: {
   active: boolean
   onClick: () => void
-  count: number
+  /** Beside the label: how many, or for an item that isn't a list, a word on its state. */
+  count: number | string
   label: string
   collapsed: boolean
   children: React.ReactNode
@@ -37,7 +39,7 @@ function Item({
       )}
     >
       {children}
-      {!collapsed && (
+      {!collapsed && typeof count === 'number' && (
         <span
           className={cn(
             'font-mono text-[11px] tabular-nums',
@@ -77,6 +79,10 @@ export function DownloadsSidebar({
   onKind: (kind: FileKind | null) => void
 }): React.JSX.Element {
   const collapsed = useAppStore((store) => store.sidebarCollapsed)
+  const networkPage = useAppStore((store) => store.networkPage)
+  const setView = useAppStore((store) => store.setView)
+  const mergeStatus = useAppStore((store) => mergeStatusView(store.merging).label)
+  const mergeTone = useAppStore((store) => mergeStatusView(store.merging).tone)
   const setCollapsed = useAppStore((store) => store.setSidebarCollapsed)
   const Toggle = collapsed ? PanelLeftOpen : PanelLeftClose
   const toggleLabel = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
@@ -150,6 +156,29 @@ export function DownloadsSidebar({
           {!collapsed && <span className="min-w-0 flex-1 truncate">{entry.label}</span>}
         </Item>
       ))}
+      {networkPage !== 'off' && (
+        <>
+          {section('System')}
+          <Item
+            active={false}
+            count={mergeStatus}
+            label="Network"
+            collapsed={collapsed}
+            onClick={() => setView({ name: 'network' })}
+          >
+            <span className="relative flex size-5 shrink-0 items-center justify-center">
+              <Network aria-hidden className="size-4" />
+              {/* Teal while combining, amber or red when it needs a look, grey otherwise. */}
+              <span
+                aria-hidden
+                className="absolute -right-0.5 -bottom-0.5 size-[7px] rounded-full ring-2 ring-card"
+                style={{ background: mergeToneColor(mergeTone) }}
+              />
+            </span>
+            {!collapsed && <span className="min-w-0 flex-1 truncate">Network</span>}
+          </Item>
+        </>
+      )}
     </nav>
   )
 }

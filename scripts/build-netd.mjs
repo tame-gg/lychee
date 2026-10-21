@@ -82,9 +82,21 @@ function parseTargets(argv) {
       a.slice('--target='.length)
         .split(',')
         .forEach((x) => out.add(x.trim()))
+    } else if (a === '--host') {
+      out.add(hostTarget())
     }
   }
   return out.size ? out : null
+}
+
+function hostTarget() {
+  const os = { linux: 'linux', darwin: 'mac', win32: 'win' }[process.platform]
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+  if (!os) {
+    console.error(`lychee-netd has no build for ${process.platform}`)
+    process.exit(1)
+  }
+  return `${os}-${arch}`
 }
 
 // Wintun is fetched and verified in L-2 (scripts/fetch-wintun.mjs). Until that lands, note that the

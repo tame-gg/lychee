@@ -2,6 +2,8 @@ import type {
   AppSettings,
   DownloadUpdate,
   FinishedDownload,
+  MergeOptionsPatch,
+  MergeState,
   NetworkInterfaceInfo,
   PendingLink,
   ProbeResult,
@@ -11,8 +13,8 @@ import type {
 } from './types'
 
 /** The request/response half of the IPC surface (every IpcChannels entry except the
- * main->renderer push events, downloadUpdated, networksChanged, historyChanged, linkReceived and
- * updateStateChanged) — one source of truth for
+ * main->renderer push events, downloadUpdated, networksChanged, historyChanged, linkReceived,
+ * updateStateChanged and mergeStateChanged) — one source of truth for
  * both lycheeApi (preload) and registerIpcHandlers (main), so a signature drift between the two
  * is a compile error instead of a runtime one. */
 export interface IpcContract {
@@ -66,4 +68,10 @@ export interface IpcContract {
   resumeFromLink: { args: [linkId: string, downloadId: string]; result: void }
   /** Forgets the sign-in of a link that won't be started. */
   dismissLink: { args: [id: string]; result: void }
+  mergeState: { args: []; result: MergeState }
+  setMerging: { args: [on: boolean]; result: void }
+  setMergeOptions: { args: [patch: MergeOptionsPatch]; result: void }
+  setMergeNetwork: { args: [id: string, enabled: boolean]; result: void }
+  setMergeWeight: { args: [id: string, weight: number | 'auto']; result: void }
+  repairNetwork: { args: []; result: void }
 }

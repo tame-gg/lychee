@@ -6,12 +6,14 @@ import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useDownloadEvents } from './hooks/useDownloadEvents'
+import { useMergeEvents } from './hooks/useMerge'
 import { useNetworkEvents } from './hooks/useNetworks'
 import { useNewDownloadShortcuts, useOpenedLinks } from './hooks/useOpenedLinks'
 import { CompleteScreen } from './screens/CompleteScreen'
 import { DownloadingScreen } from './screens/DownloadingScreen'
 import { DownloadsScreen } from './screens/DownloadsScreen'
 import { ErrorScreen } from './screens/ErrorScreen'
+import { NetworkScreen } from './screens/NetworkScreen'
 import { useAppStore } from './store/useAppStore'
 
 function assertNever(status: never): never {
@@ -43,10 +45,12 @@ function App(): React.JSX.Element {
   useOpenedLinks()
   useNewDownloadShortcuts()
   useNetworkEvents()
+  useMergeEvents()
 
   const downloads = useAppStore((store) => store.downloads)
   const history = useAppStore((store) => store.history)
   const view = useAppStore((store) => store.view)
+  const networkPage = useAppStore((store) => store.networkPage)
   // A download that's gone (removed, deleted) leaves the list showing.
   const shown =
     view.name === 'download'
@@ -60,7 +64,13 @@ function App(): React.JSX.Element {
         <div className="flex h-full flex-col">
           <TitleBar />
           <div className="min-h-0 flex-1">
-            {shown && !cancelled ? renderDownload(shown) : <DownloadsScreen />}
+            {view.name === 'network' && networkPage !== 'off' ? (
+              <NetworkScreen />
+            ) : shown && !cancelled ? (
+              renderDownload(shown)
+            ) : (
+              <DownloadsScreen />
+            )}
           </div>
           <StatusBar />
           <NewDownloadDialog />

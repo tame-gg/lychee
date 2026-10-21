@@ -56,6 +56,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/netd/go.mod
+          cache-dependency-path: native/netd/go.sum
+
       # Electron needs a display even with its window hidden.
       - name: Run smoke tests
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24 -noreset" npm run test:e2e:smoke

@@ -320,6 +320,16 @@ Still open:
 
 ---
 
+## Status (2026-10-20, branch `s3/netmerge-complete`)
+
+What ships on macOS and Linux today, against the plan above:
+
+- **L-2 (packaging).** Done as in sections 10 and 11, with one difference: electron-builder has no `${os}` macro, so each OS's own `extraResources` entry names `build/netd/<os>-${arch}`, and a `beforePack` hook (`scripts/before-pack.mjs`) compiles the helper for the exact target being packaged. `scripts/check-netd-package.mjs` runs from `scripts/after-pack.mjs`. Not done: `fetch-wintun.mjs` (the Windows package has no `wintun.dll` yet; the check warns instead of failing) and `netd-notices.mjs` (no generated `THIRD-PARTY-NOTICES-netd.md` yet; `NOTICE` and `licenses/net-merge-LICENSE.txt` ship).
+- **L-5 (hide the TUN).** Done: by the fixed name, by the name the helper reports while the adapter is open, and by the `198.18.0.0/24` and `fd6e:6d65:7267::/64` addresses.
+- **L-7 (elevation), minimal.** macOS uses option (1) of section 4 as the default: one `osascript … with administrator privileges` step per Lychee session installs the root-owned copy when it is missing or not Lychee's version, then starts it with `SUDO_UID` set for the signed-in user. The sudoers rule of option (2) is honoured when it exists (no prompt) but nothing writes it yet. Linux runs the capability copy from `/usr/lib/lychee` (deb/rpm `after-install.sh` installs it with `setcap`), else the packaged copy through `pkexec`. A helper of another version is refused before launch (installed copy) and after `hello`. Windows is unchanged from L-3 (UAC per launch) and untested.
+- **L-8 (lifecycle), minimal.** `before-quit` stops the helper within the quit budget; "Repair network" sends `cleanup`; a vanished helper shows as stopped with the history kept. Not done: keeping Lychee in the tray while merging, the `lychee-netd.log` file and diagnostics export.
+- **L-4 (egress pinning) and L-6 (Network page)** are not on this branch; the page's IPC and store API (`mergeState`, `setMerging`, `setMergeOptions`, `setMergeNetwork`, `setMergeWeight`, `repairNetwork`, `onMergeState`) is in place.
+
 ## 15. tame-gg/net-merge is no longer used
 
 The fork `tame-gg/net-merge` is not developed further. Its PR #1 (the control channel spec written for a separate helper) and the unpushed local branch `s3/control-server` stay as they are; whether to archive the repository is for Andrew and the GitHub admin to decide. The engine's origin is `rohit267/net-merge` at `227c4dd` (v0.3.1), recorded in `native/netd/UPSTREAM.md`; fixes that land upstream later are carried into `native/netd` by hand.

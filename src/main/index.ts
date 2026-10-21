@@ -14,6 +14,7 @@ import { testKnobs } from './testKnobs'
 import { windowSize } from './windowSize'
 import { setInterfaceSize, trackZoom, zoomOn } from './windowZoom'
 import type { DownloadManager } from './download/downloadManager'
+import type { MergeController } from './network/merge/mergeController'
 
 // In dev mode the app runs as the raw `electron` binary, which otherwise shows "Electron" in
 // the Dock tooltip/menu bar — must be set before the app is ready. Packaged builds already get
@@ -29,6 +30,7 @@ if (!app.requestSingleInstanceLock()) app.exit(0)
 
 let mainWindow: BrowserWindow | null = null
 let downloadManager: DownloadManager | null = null
+let mergeController: MergeController | null = null
 let quitAfterSuspending = false
 let tray: Tray | null = null
 /** The window's content zoom (see windowZoom.ts), which the title bar's controls follow. */
@@ -182,7 +184,9 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  downloadManager = registerIpcHandlers(() => mainWindow)
+  const registered = registerIpcHandlers(() => mainWindow)
+  downloadManager = registered.manager
+  mergeController = registered.merge
   void startBridge({
     manager: downloadManager,
     offer: (link) => offerLink(link, ensureWindow())
@@ -222,7 +226,7 @@ app.on('before-quit', (event) => {
     app.exit(0)
   }, 3000)
 
-  void downloadManager.suspendAll().finally(() => {
+  void Promise.allSettled([downloadManager.suspendAll(), mergeController?.shutdown()]).then(() => {
     clearTimeout(forceQuitTimeout)
     quitAfterSuspending = true
     app.exit(0)

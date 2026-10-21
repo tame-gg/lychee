@@ -355,6 +355,9 @@ export interface AppSettings {
   interfaceSize?: InterfaceSize
   browserExtensionUsed?: boolean
   sidebarCollapsed?: boolean
+  merge?: MergeSettings
+  /** Only ever saved as true, by hand: shows the Network page, wired to the real helper. */
+  showNetworkPage?: boolean
 }
 
 /** How big the window's content is drawn. Auto shrinks it a little on a highly scaled display
@@ -388,7 +391,13 @@ export interface InitialState {
   sidebarCollapsed: boolean
   /** The last folder picked, if it still exists — otherwise the renderer uses downloadsDir. */
   destinationDir?: string
+  merge: MergeSettings
+  networkPage: NetworkPageMode
 }
+
+/** Whether the sidebar offers the Network page, and what drives it: the real helper through
+ * window.lychee, or a simulation in the renderer (for working on the page without a helper). */
+export type NetworkPageMode = 'off' | 'helper' | 'mock' | `mock:${MergeStatus}`
 
 interface StartDownloadRequestBase {
   url: string
@@ -450,3 +459,132 @@ export interface StartTorrentDownloadRequest extends StartDownloadRequestBase {
 }
 
 export type StartDownloadRequest = StartHttpDownloadRequest | StartTorrentDownloadRequest
+
+export type MergeIpv6Mode = 'auto' | 'on' | 'off'
+
+export interface MergeSettings {
+  enabled: boolean
+  ipv6: MergeIpv6Mode
+  autoPause: boolean
+  excluded: string[]
+  weights: Record<string, number>
+}
+
+export interface MergeOptionsPatch {
+  ipv6?: MergeIpv6Mode
+  autoPause?: boolean
+}
+
+export type MergeStatus =
+  | 'off'
+  | 'starting'
+  | 'on'
+  | 'paused_auto'
+  | 'error'
+  | 'reconnecting'
+  | 'stopped'
+  | 'needs_permission'
+  | 'needs_admin'
+  | 'not_installed'
+  | 'out_of_date'
+  | 'unsupported'
+  | 'another_tool'
+  | 'unavailable'
+
+export type MergeLinkState = 'none' | 'checking' | 'up' | 'down'
+export type MergeWeightMode = 'auto' | 'manual'
+
+export interface MergeAdapter {
+  name: string
+  ip: string | null
+  ip6: string | null
+  present: boolean
+  excluded: boolean
+  state: MergeLinkState
+  state6: MergeLinkState
+  weight: number
+  weight6: number
+  weight_mode: MergeWeightMode
+  peak_bps: number
+  peak6_bps: number
+  active_flows: number
+  total_flows: number
+  failed_flows: number
+  link_in_bps: number
+  link_out_bps: number
+  relayed_in_bps: number
+  relayed_out_bps: number
+  bytes_in: number
+  bytes_out: number
+}
+
+export interface MergeTotals {
+  link_in_bps: number
+  link_out_bps: number
+  relayed_in_bps: number
+  relayed_out_bps: number
+  active_flows: number
+  adapters_present: number
+  adapters_usable: number
+}
+
+export interface MergeSkipped {
+  name: string
+  reason: string
+}
+
+export interface MergeCapture {
+  available: boolean
+  error: string | null
+}
+
+export interface MergeAutopause {
+  enabled: boolean
+  status: string
+}
+
+export interface MergeIpv6 {
+  mode: MergeIpv6Mode
+  effective: 'balanced' | 'refused'
+  detail: string
+}
+
+export interface MergeTun {
+  name: string | null
+  open: boolean
+}
+
+export interface MergeHelperInfo {
+  version: string
+  pid: number
+  os: string
+  arch: string
+  instance: string
+  capabilities: string[]
+}
+
+export interface MergeHistory {
+  down: Record<string, number[]>
+  up: Record<string, number[]>
+}
+
+export const MERGE_HISTORY_SECONDS = SPEED_HISTORY_SECONDS
+
+export interface MergeState {
+  seq: number
+  status: MergeStatus
+  message: string | null
+  settings: MergeSettings
+  helper: MergeHelperInfo | null
+  helperState: string | null
+  capture: MergeCapture | null
+  autopause: MergeAutopause | null
+  ipv6: MergeIpv6 | null
+  tun: MergeTun | null
+  stateSince: number | null
+  totals: MergeTotals | null
+  adapters: MergeAdapter[]
+  skipped: MergeSkipped[]
+  discoverySeq: number
+  history: MergeHistory
+}
