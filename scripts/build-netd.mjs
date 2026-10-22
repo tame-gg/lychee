@@ -99,15 +99,17 @@ function hostTarget() {
   return `${os}-${arch}`
 }
 
-// Wintun is fetched and verified in L-2 (scripts/fetch-wintun.mjs). Until that lands, note that the
-// Windows build has no wintun.dll yet rather than failing the build.
+// Wintun is fetched and verified in L-2 (scripts/fetch-wintun.mjs).
 function ensureWintun(outDir) {
   const fetch = join(root, 'scripts', 'fetch-wintun.mjs')
-  if (!existsSync(fetch)) {
-    console.log(
-      'note: wintun.dll is not fetched yet (scripts/fetch-wintun.mjs lands in L-2); win-x64 helper is incomplete until then'
-    )
-    return
+  if (existsSync(fetch)) {
+    execFileSync('node', [fetch, '--out', outDir], { cwd: root, stdio: 'inherit' })
   }
-  execFileSync('node', [fetch, '--out', outDir], { cwd: root, stdio: 'inherit' })
+  const dll = join(outDir, 'wintun.dll')
+  if (!existsSync(dll)) {
+    console.error(
+      `build-netd: ${dll} is missing; a Windows helper cannot ship without Wintun (scripts/fetch-wintun.mjs has not landed, and no wintun.dll was placed there by hand)`
+    )
+    process.exit(1)
+  }
 }
