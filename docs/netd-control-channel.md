@@ -1514,7 +1514,7 @@ If the helper dies without running 10.4 (kill -9, panic, power loss of the proce
   execute it; a copy the user cannot execute is passed over for the one under the app's resources) as
   the user: `/usr/lib/lychee/lychee-netd serve --control $XDG_RUNTIME_DIR/lychee/netd.sock`. Exit 3
   within a second means no capabilities (an AppImage, or a user outside the `lychee` group): relaunch as
-  `pkexec <abs path> serve --control /run/lychee-netd/netd.sock`.
+  `/usr/bin/pkexec <abs path> serve --control /run/lychee-netd/netd.sock`.
 - macOS: exactly
   `sudo -n /Library/PrivilegedHelperTools/gg.tame.lychee.netd serve --control /var/run/lychee-netd/netd.sock`.
   If `sudo -n -l` for that exact command line fails, the helper is not installed or the rule is not the

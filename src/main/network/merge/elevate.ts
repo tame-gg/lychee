@@ -478,7 +478,7 @@ export class NativeLauncher implements Launcher {
     }
     const path = LINUX_ROOT_CONTROL
     const helper = spawnHelper(
-      'pkexec',
+      '/usr/bin/pkexec',
       [binary, 'serve', '--control', path],
       this.env.env,
       this.log
