@@ -165,13 +165,6 @@ func TestRootRequiresFixedPath(t *testing.T) {
 	}
 }
 
-func TestPeerCheckRejectsOtherUid(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip("needs root to spawn a child as another uid")
-	}
-	t.Skip("covered by the privileged e2e scripts")
-}
-
 func TestSelfCheckWhenRoot(t *testing.T) {
 	if runtime.GOOS != "darwin" && !(runtime.GOOS == "linux" && os.Geteuid() == 0) {
 		t.Skip("self-check applies to macOS and to Linux running as root")

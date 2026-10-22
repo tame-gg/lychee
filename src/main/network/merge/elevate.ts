@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { accessSync, constants, existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
@@ -109,6 +109,15 @@ function bundledBinary(env: HelperEnvironment, os: 'mac' | 'linux' | 'win', name
     : join(env.appRoot, 'build', 'netd', `${os}-${buildDir(env.arch)}`, name)
 }
 
+function runnable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function helperLocation(env: HelperEnvironment): HelperLocation | FailedLaunch {
   if (env.platform === 'win32') {
     if (env.arch !== 'x64') {
@@ -142,7 +151,7 @@ export function helperLocation(env: HelperEnvironment): HelperLocation | FailedL
   if (env.platform === 'linux') {
     const bundled = bundledBinary(env, 'linux', 'lychee-netd')
     const candidates = env.packaged ? [LINUX_SYSTEM_HELPER, bundled] : [bundled]
-    const binary = candidates.find((candidate) => existsSync(candidate))
+    const binary = candidates.find(runnable)
     if (!binary) {
       return {
         kind: 'failed',
@@ -433,6 +442,11 @@ export class NativeLauncher implements Launcher {
 
   private async launchLinux(chosen: string, bundled: string | null): Promise<LaunchResult> {
     let binary = chosen
+    if (this.env.packaged && chosen !== LINUX_SYSTEM_HELPER && existsSync(LINUX_SYSTEM_HELPER)) {
+      this.log(
+        `${LINUX_SYSTEM_HELPER} is not executable by this user (only the lychee group may run it); using ${chosen}`
+      )
+    }
     const installed = await reportedVersion(binary, this.env.env)
     if (installed === null) {
       return failed('unavailable', `the network helper at ${binary} could not be run`)

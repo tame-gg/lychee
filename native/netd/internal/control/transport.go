@@ -60,5 +60,5 @@ func decideUnixPeer(uid, pid uint32, authUID int, requireNonZeroPid bool) bool {
 	if requireNonZeroPid && pid == 0 {
 		return false
 	}
-	return int(uid) == authUID || uid == 0
+	return int(uid) == authUID
 }

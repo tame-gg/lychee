@@ -17,7 +17,7 @@ Requires Node.js 22.12+ and npm 9+, on Windows, macOS, or Linux. Packaging (`npm
 
 - **macOS**: `npm run build:mac` writes `dist/mac/Lychee.app`. A build made on your own Mac isn't quarantined, so it opens without the first-launch step.
 - **Windows**: `npm run build:win`, from PowerShell, writes the installer to `dist/`. For an app you run without installing, use `npm run build:unpack` and open `dist/win-unpacked/lychee.exe`.
-- **Linux**: `npm run build:linux` writes the AppImage and `.deb` packages to `dist/`
+- **Linux**: `npm run build:linux` writes the AppImage and `.deb` packages to `dist/`. Installing the `.deb` or `.rpm` makes the network helper runnable by the installing user only (system group `lychee`, joined at the next login); other users are asked for an administrator password instead.
 
 Local builds are unsigned, except on macOS, where they are ad-hoc signed.
 

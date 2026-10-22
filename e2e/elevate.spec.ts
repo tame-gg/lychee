@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -45,7 +45,7 @@ test.describe('helperLocation', () => {
   test('a development build uses build/netd/<os>-<arch>', () => {
     const binary = join(root, 'build', 'netd', 'linux-arm64', 'lychee-netd')
     mkdirSync(join(root, 'build', 'netd', 'linux-arm64'), { recursive: true })
-    writeFileSync(binary, '')
+    writeFileSync(binary, '', { mode: 0o755 })
     expect(helperLocation(environment({ arch: 'arm64', appRoot: root }))).toEqual({
       binary,
       bundled: binary
@@ -59,8 +59,18 @@ test.describe('helperLocation', () => {
   test('a packaged Linux build prefers the system copy, then resources/helper', () => {
     const packaged = join(root, 'resources', 'helper', 'lychee-netd')
     mkdirSync(join(root, 'resources', 'helper'), { recursive: true })
-    writeFileSync(packaged, '')
+    writeFileSync(packaged, '', { mode: 0o755 })
     const env = environment({ packaged: true, resourcesPath: join(root, 'resources') })
+    expect(helperLocation(env)).toEqual({ binary: packaged, bundled: packaged })
+  })
+
+  test('a Linux helper this user may not execute is passed over', () => {
+    const packaged = join(root, 'resources', 'helper', 'lychee-netd')
+    mkdirSync(join(root, 'resources', 'helper'), { recursive: true })
+    writeFileSync(packaged, '', { mode: 0o644 })
+    const env = environment({ packaged: true, resourcesPath: join(root, 'resources') })
+    expect(helperLocation(env)).toMatchObject({ kind: 'failed', status: 'unsupported' })
+    chmodSync(packaged, 0o750)
     expect(helperLocation(env)).toEqual({ binary: packaged, bundled: packaged })
   })
 

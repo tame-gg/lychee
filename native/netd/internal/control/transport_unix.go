@@ -147,6 +147,25 @@ func unlinkIfInode(path string, ino uint64) {
 	}
 }
 
+type peerCredentials struct {
+	uid uint32
+	pid uint32
+}
+
+func unixPeerCheck(authUID int, read func(net.Conn) (peerCredentials, error)) func(net.Conn) (PeerInfo, error) {
+	return func(nc net.Conn) (PeerInfo, error) {
+		cred, err := read(nc)
+		if err != nil {
+			return PeerInfo{}, err
+		}
+		info := PeerInfo{UID: int(cred.uid), PID: int(cred.pid)}
+		if !decideUnixPeer(cred.uid, cred.pid, authUID, peerPidRequired) {
+			return info, fmt.Errorf("uid=%d pid=%d not authorized", cred.uid, cred.pid)
+		}
+		return info, nil
+	}
+}
+
 func peerCredError(nc net.Conn) (func(func(uintptr)) error, error) {
 	type rawConn interface {
 		SyscallConn() (syscall.RawConn, error)
