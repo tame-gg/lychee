@@ -1537,6 +1537,13 @@ If the helper dies without running 10.4 (kill -9, panic, power loss of the proce
   `set_autopause`, `exclude` for each persisted name present in `adapters`, `set_weight` for each
   persisted override, and finally `on` only if the user's persisted choice is on and the client decides
   to auto-start merging. The helper never turns merging on by itself.
+- Stopping: send `quit` and wait for the connection to close. That is the only stop the client has
+  for a root helper. Killing the process the client spawned does not stop it: `osascript` is not the
+  parent of the privileged shell it starts, and `pkexec` execs the helper in place, so the pid the
+  client holds belongs to a root process that an unprivileged Lychee cannot signal. A root helper whose
+  client goes away without `quit` (Lychee killed, crashed, or its `kill()` of `osascript`/`pkexec`)
+  exits on its own 10 s later, when the grace period of section 10.3 runs out. Only a helper running as
+  the user (the Linux capabilities path) is actually stopped by the client's `kill()`.
 
 ### 10.7 Coexistence with a standalone net-merge install
 
