@@ -1,6 +1,9 @@
 #!/bin/bash
 
 NETD_GROUP='lychee'
+LOGIN_DEFS='/etc/login.defs'
+DEFAULT_UID_MIN=1000
+NOBODY_UID=65534
 
 netd_group_id() {
   local gid
@@ -12,12 +15,34 @@ netd_group_id() {
   printf '%s\n' "$gid"
 }
 
+uid_min() {
+  local key value min=$DEFAULT_UID_MIN
+  if [ -r "$LOGIN_DEFS" ]; then
+    while read -r key value _; do
+      if [ "$key" = UID_MIN ]; then
+        case $value in
+          '' | *[!0-9]*) ;;
+          *) min=$value ;;
+        esac
+      fi
+    done < "$LOGIN_DEFS"
+  fi
+  printf '%s\n' "$min"
+}
+
+regular_uid() {
+  case $1 in
+    '' | *[!0-9]* | 0) return 1 ;;
+  esac
+  [ "$1" -ge "$(uid_min)" ] && [ "$1" -ne "$NOBODY_UID" ]
+}
+
 installing_user() {
   local uid name
   for uid in "$SUDO_UID" "$PKEXEC_UID"; do
-    case $uid in
-      '' | *[!0-9]* | 0) continue ;;
-    esac
+    if ! regular_uid "$uid"; then
+      continue
+    fi
     name=$(getent passwd "$uid" | cut -d: -f1)
     if [ -n "$name" ]; then
       printf '%s\n' "$name"

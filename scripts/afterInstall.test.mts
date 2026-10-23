@@ -27,6 +27,7 @@ interface Scenario {
   group?: string
   passwd?: string[]
   env?: Record<string, string>
+  loginDefs?: string
   failing?: string[]
   source?: boolean
   installed?: string
@@ -94,6 +95,8 @@ function run(scenario: Scenario): Outcome {
       (scenario.passwd ?? ['box:x:1000:1000::/home/box:/bin/bash']).map((l) => `${l}\n`).join('')
     )
     writeFileSync(join(state, 'calls'), '')
+    if (scenario.loginDefs !== undefined)
+      writeFileSync(join(state, 'login.defs'), scenario.loginDefs)
     for (const tool of scenario.failing ?? []) writeFileSync(join(state, `${tool}-fails`), '')
     if (scenario.source !== false) writeFileSync(source, 'helper build 2\n', { mode: 0o755 })
     if (scenario.installed !== undefined) {
@@ -104,6 +107,7 @@ function run(scenario: Scenario): Outcome {
     writeFileSync(script, render(template))
     const shell = [
       'source "$1"',
+      'LOGIN_DEFS="$4/login.defs"',
       'install_netd "$2" "$3"',
       'status=$?',
       'stat -c "%n %u:%g:%a" "$3" "$3/lychee-netd" > "$4/stat" 2>/dev/null',
@@ -197,10 +201,80 @@ test('the installing user comes from SUDO_UID or PKEXEC_UID, never root or junk'
   })
   assert.deepEqual(junk.calls, [caps(junk)])
   assert.match(junk.stdout, /sudo gpasswd -a \$USER lychee/)
-  const nobody = run({ group: 'lychee:x:987:', passwd })
-  assert.deepEqual(nobody.calls, [caps(nobody)])
-  assert.deepEqual(nobody.stat, ['DIR 0:0:755', 'HELPER 0:987:750'])
-  assert.match(nobody.stdout, /sudo gpasswd -a \$USER lychee/)
+  const noUid = run({ group: 'lychee:x:987:', passwd })
+  assert.deepEqual(noUid.calls, [caps(noUid)])
+  assert.deepEqual(noUid.stat, ['DIR 0:0:755', 'HELPER 0:987:750'])
+  assert.match(noUid.stdout, /sudo gpasswd -a \$USER lychee/)
+})
+
+test('root and nobody are never added to the group', { skip }, () => {
+  const passwd = [
+    'root:x:0:0:root:/root:/bin/bash',
+    'box:x:1000:1000::/home/box:/bin/bash',
+    'nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin'
+  ]
+  const out = run({ group: 'lychee:x:987:', passwd, env: { SUDO_UID: '0', PKEXEC_UID: '65534' } })
+  assert.equal(out.status, 0, out.stderr)
+  assert.deepEqual(out.calls, [caps(out)])
+  assert.equal(out.group, 'lychee:x:987:')
+  assert.match(out.stdout, /sudo gpasswd -a \$USER lychee/)
+})
+
+test('a system account below UID_MIN is skipped for the next candidate', { skip }, () => {
+  const passwd = [
+    'svc:x:999:999:service:/var/lib/svc:/usr/sbin/nologin',
+    'box:x:1000:1000::/home/box:/bin/bash'
+  ]
+  const onlySystem = run({ group: 'lychee:x:987:', passwd, env: { SUDO_UID: '999' } })
+  assert.deepEqual(onlySystem.calls, [caps(onlySystem)])
+  assert.equal(onlySystem.group, 'lychee:x:987:')
+  assert.match(onlySystem.stdout, /sudo gpasswd -a \$USER lychee/)
+  const thenUser = run({
+    group: 'lychee:x:987:',
+    passwd,
+    env: { SUDO_UID: '999', PKEXEC_UID: '1000' },
+    loginDefs: '# UID_MIN 500\nUID_MAX\t60000\n\n'
+  })
+  assert.deepEqual(thenUser.calls, [caps(thenUser), 'gpasswd -a box lychee'])
+  assert.equal(thenUser.group, 'lychee:x:987:box')
+})
+
+test('UID_MIN from login.defs decides which accounts are regular users', { skip }, () => {
+  const passwd = [
+    'carol:x:600:600::/home/carol:/bin/sh',
+    'box:x:1000:1000::/home/box:/bin/bash',
+    'nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin'
+  ]
+  const raised = run({
+    group: 'lychee:x:987:',
+    passwd,
+    env: { SUDO_UID: '1000' },
+    loginDefs: 'UID_MIN 1000\n#UID_MIN 500\nUID_MIN\t\t2000\n'
+  })
+  assert.deepEqual(raised.calls, [caps(raised)])
+  assert.equal(raised.group, 'lychee:x:987:')
+  const lowered = run({
+    group: 'lychee:x:987:',
+    passwd,
+    env: { SUDO_UID: '600' },
+    loginDefs: 'UID_MIN   500\n'
+  })
+  assert.deepEqual(lowered.calls, [caps(lowered), 'gpasswd -a carol lychee'])
+  assert.equal(lowered.group, 'lychee:x:987:carol')
+  const stillNobody = run({
+    group: 'lychee:x:987:',
+    passwd,
+    env: { PKEXEC_UID: '65534' },
+    loginDefs: 'UID_MIN 500\n'
+  })
+  assert.deepEqual(stillNobody.calls, [caps(stillNobody)])
+  const junk = run({
+    group: 'lychee:x:987:',
+    passwd,
+    env: { SUDO_UID: '600' },
+    loginDefs: 'UID_MIN five-hundred\n'
+  })
+  assert.deepEqual(junk.calls, [caps(junk)])
 })
 
 test('without the group the helper is not installed and an old copy is removed', { skip }, () => {

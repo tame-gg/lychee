@@ -189,8 +189,10 @@ Rules when the helper runs as the user with capabilities:
 The deb and rpm packages install the helper at `/usr/lib/lychee/lychee-netd` owned by `root:lychee`
 with mode `0750` and the capabilities set (`build/linux/after-install.sh`, on every install and
 upgrade, since replacing the file drops its capabilities). The script creates the system group
-`lychee` when it is missing and adds the installing user, taken from `SUDO_UID` or else `PKEXEC_UID`,
-to it; the membership applies from that user's next login. Any other user cannot execute the file, and
+`lychee` when it is missing and adds the installing user to it: the first of `SUDO_UID` and
+`PKEXEC_UID` that names a regular account, a uid at or above `UID_MIN` from `/etc/login.defs` (1000
+when unset) other than 65534, so root, system accounts and `nobody` are never added. The membership
+applies from that user's next login. Any other user cannot execute the file, and
 Lychee passes it over for the copy under the app's resources, which has no capabilities and so ends in
 the `pkexec` launch (section 10.6).
 
