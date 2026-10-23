@@ -196,7 +196,9 @@ applies from that user's next login. `build/linux/after-remove.sh` deletes the c
 is removed or purged (deb) or erased (rpm, `$1` is 0) and not on an upgrade, where rpm runs the old
 package's `%postun` after the new `%post`. Any other user cannot execute the file, and
 Lychee passes it over for the copy under the app's resources, which has no capabilities and so ends in
-the `pkexec` launch (section 10.6).
+the `pkexec` launch (section 10.6). That bundled copy, `/opt/Lychee/resources/helper/lychee-netd` in
+the deb and rpm, is executable by everyone (`scripts/check-netd-package.mjs` insists on it) and that is
+harmless: without file capabilities it is an ordinary program that exits 3 for whoever runs it.
 
 ### 2.3 macOS
 
