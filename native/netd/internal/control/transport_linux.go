@@ -15,6 +15,8 @@ import (
 const (
 	linuxRootDir  = "/run/lychee-netd"
 	linuxRootSock = linuxRootDir + "/netd.sock"
+
+	peerPidRequired = true
 )
 
 func Listen(path string) (*Transport, int, error) {
@@ -82,33 +84,27 @@ func finishUnix(path string, root bool, authUID int, privilege string) (*Transpo
 	return &Transport{
 		Listener:  ln,
 		Auth:      AuthInfo{Model: "unix_peer_uid", Privilege: privilege, UID: &uid},
-		PeerCheck: unixPeerCheck(authUID),
+		PeerCheck: unixPeerCheck(authUID, socketPeerCredentials),
 		cleanup:   func() { unlinkIfInode(path, ino) },
 	}, ExitOK, nil
 }
 
-func unixPeerCheck(authUID int) func(net.Conn) (PeerInfo, error) {
-	return func(nc net.Conn) (PeerInfo, error) {
-		ctrl, err := peerCredError(nc)
-		if err != nil {
-			return PeerInfo{}, err
-		}
-		var cred *unix.Ucred
-		var ce error
-		if err := ctrl(func(fd uintptr) {
-			cred, ce = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
-		}); err != nil {
-			return PeerInfo{}, err
-		}
-		if ce != nil {
-			return PeerInfo{}, ce
-		}
-		info := PeerInfo{UID: int(cred.Uid), PID: int(cred.Pid)}
-		if !decideUnixPeer(cred.Uid, uint32(cred.Pid), authUID, true) {
-			return info, fmt.Errorf("uid=%d pid=%d not authorized", cred.Uid, cred.Pid)
-		}
-		return info, nil
+func socketPeerCredentials(nc net.Conn) (peerCredentials, error) {
+	ctrl, err := peerCredError(nc)
+	if err != nil {
+		return peerCredentials{}, err
 	}
+	var cred *unix.Ucred
+	var ce error
+	if err := ctrl(func(fd uintptr) {
+		cred, ce = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+	}); err != nil {
+		return peerCredentials{}, err
+	}
+	if ce != nil {
+		return peerCredentials{}, ce
+	}
+	return peerCredentials{uid: cred.Uid, pid: uint32(cred.Pid)}, nil
 }
 
 func CheckPrivilege() (int, error) {

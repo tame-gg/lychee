@@ -1,13 +1,23 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import {
   ADMIN_ACCOUNT_MESSAGE,
   ANOTHER_TOOL_MESSAGE,
   MAC_CONTROL,
   MAC_HELPER,
+  NativeLauncher,
   PERMISSION_MESSAGE,
+  PKEXEC_PATHS,
   appleScriptString,
   connectOnlyLauncher,
   exitStatus,
@@ -15,6 +25,7 @@ import {
   macAdminAppleScript,
   macAdminShellScript,
   osascriptOutcome,
+  pkexecPath,
   type HelperEnvironment
 } from '../src/main/network/merge/elevate'
 
@@ -45,7 +56,7 @@ test.describe('helperLocation', () => {
   test('a development build uses build/netd/<os>-<arch>', () => {
     const binary = join(root, 'build', 'netd', 'linux-arm64', 'lychee-netd')
     mkdirSync(join(root, 'build', 'netd', 'linux-arm64'), { recursive: true })
-    writeFileSync(binary, '')
+    writeFileSync(binary, '', { mode: 0o755 })
     expect(helperLocation(environment({ arch: 'arm64', appRoot: root }))).toEqual({
       binary,
       bundled: binary
@@ -59,8 +70,18 @@ test.describe('helperLocation', () => {
   test('a packaged Linux build prefers the system copy, then resources/helper', () => {
     const packaged = join(root, 'resources', 'helper', 'lychee-netd')
     mkdirSync(join(root, 'resources', 'helper'), { recursive: true })
-    writeFileSync(packaged, '')
+    writeFileSync(packaged, '', { mode: 0o755 })
     const env = environment({ packaged: true, resourcesPath: join(root, 'resources') })
+    expect(helperLocation(env)).toEqual({ binary: packaged, bundled: packaged })
+  })
+
+  test('a Linux helper this user may not execute is passed over', () => {
+    const packaged = join(root, 'resources', 'helper', 'lychee-netd')
+    mkdirSync(join(root, 'resources', 'helper'), { recursive: true })
+    writeFileSync(packaged, '', { mode: 0o644 })
+    const env = environment({ packaged: true, resourcesPath: join(root, 'resources') })
+    expect(helperLocation(env)).toMatchObject({ kind: 'failed', status: 'unsupported' })
+    chmodSync(packaged, 0o750)
     expect(helperLocation(env)).toEqual({ binary: packaged, bundled: packaged })
   })
 
@@ -163,6 +184,90 @@ test.describe('exitStatus', () => {
     expect(exitStatus(exit(5), `first\nerror:   ${long}\n`, 'linux').message).toBe(
       long.slice(0, 200)
     )
+  })
+})
+
+test.describe('pkexec', () => {
+  test('comes from a fixed list of absolute paths, the first that can be run', () => {
+    expect(PKEXEC_PATHS).toEqual(['/usr/bin/pkexec', '/run/wrappers/bin/pkexec'])
+    expect(PKEXEC_PATHS.every((path) => isAbsolute(path))).toBe(true)
+    const asked: string[] = []
+    const nixos = pkexecPath((path) => {
+      asked.push(path)
+      return path === '/run/wrappers/bin/pkexec'
+    })
+    expect(nixos).toBe('/run/wrappers/bin/pkexec')
+    expect(asked).toEqual(PKEXEC_PATHS)
+    expect(pkexecPath(() => true)).toBe('/usr/bin/pkexec')
+    expect(pkexecPath(() => false)).toBeNull()
+  })
+
+  test.describe('the Linux launcher', () => {
+    test.skip(process.platform !== 'linux', 'the fake helper and pkexec are shell scripts')
+    let root: string
+    let helper: string
+    let onPath: string
+    let fixed: string
+
+    test.beforeEach(() => {
+      root = mkdtempSync(join(tmpdir(), 'lychee-pkexec-'))
+      helper = join(root, 'build', 'netd', 'linux-x64', 'lychee-netd')
+      onPath = join(root, 'path', 'pkexec')
+      fixed = join(root, 'fixed', 'pkexec')
+      mkdirSync(join(root, 'build', 'netd', 'linux-x64'), { recursive: true })
+      mkdirSync(join(root, 'path'))
+      mkdirSync(join(root, 'fixed'))
+      mkdirSync(join(root, 'run'))
+      writeFileSync(
+        helper,
+        [
+          '#!/bin/bash',
+          'case $1 in',
+          "  version) echo 'lychee-netd 0.2.0' ;;",
+          "  serve) echo 'error: the network helper needs root' >&2; exit 3 ;;",
+          'esac'
+        ].join('\n'),
+        { mode: 0o755 }
+      )
+      writeFileSync(onPath, `#!/bin/bash\necho ran > '${join(root, 'path-ran')}'\n`, {
+        mode: 0o755
+      })
+      writeFileSync(fixed, `#!/bin/bash\necho "$@" > '${join(root, 'fixed-argv')}'\nexit 127\n`, {
+        mode: 0o755
+      })
+    })
+
+    test.afterEach(() => {
+      rmSync(root, { recursive: true, force: true })
+    })
+
+    function launcher(pkexec: () => string | null): NativeLauncher {
+      const env = environment({
+        appRoot: root,
+        env: { PATH: join(root, 'path'), XDG_RUNTIME_DIR: join(root, 'run') }
+      })
+      return new NativeLauncher(env, () => {}, { pkexec })
+    }
+
+    test('without pkexec at a fixed path the launch fails, whatever PATH holds', async () => {
+      expect(await launcher(() => null).launch()).toEqual({
+        kind: 'failed',
+        status: 'not_installed',
+        message: 'the network helper needs pkexec, which is not installed'
+      })
+      expect(existsSync(join(root, 'path-ran'))).toBe(false)
+    })
+
+    test('the pkexec at the fixed path starts the helper on the root control socket', async () => {
+      expect(await launcher(() => fixed).launch()).toMatchObject({
+        kind: 'failed',
+        status: 'needs_permission'
+      })
+      expect(readFileSync(join(root, 'fixed-argv'), 'utf8')).toBe(
+        `${helper} serve --control /run/lychee-netd/netd.sock\n`
+      )
+      expect(existsSync(join(root, 'path-ran'))).toBe(false)
+    })
   })
 })
 
