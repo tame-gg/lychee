@@ -22,8 +22,11 @@ func TestPeerCheckDecision(t *testing.T) {
 	if !decideUnixPeer(1000, 123, 1000, true) {
 		t.Fatal("same uid with non-zero pid should be accepted")
 	}
-	if !decideUnixPeer(0, 123, 1000, true) {
-		t.Fatal("root should be accepted")
+	if decideUnixPeer(0, 123, 1000, true) {
+		t.Fatal("root is not the socket owner and should be refused")
+	}
+	if !decideUnixPeer(0, 123, 0, true) {
+		t.Fatal("root should be accepted when it owns the socket")
 	}
 	if decideUnixPeer(65534, 123, 1000, true) {
 		t.Fatal("another uid should be rejected")

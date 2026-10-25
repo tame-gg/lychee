@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { accessSync, constants, existsSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
@@ -77,6 +77,7 @@ export const MAC_PROMPT = 'Lychee needs an administrator password to combine you
 export const PERMISSION_MESSAGE = 'permission to start the network helper was not given'
 export const LINUX_SYSTEM_HELPER = '/usr/lib/lychee/lychee-netd'
 export const LINUX_ROOT_CONTROL = '/run/lychee-netd/netd.sock'
+export const PKEXEC_PATHS = ['/usr/bin/pkexec', '/run/wrappers/bin/pkexec']
 export const PIPE_PREFIX = '\\\\.\\pipe\\lychee-netd-'
 
 const EARLY_EXIT_MS = 1000
@@ -107,6 +108,19 @@ function bundledBinary(env: HelperEnvironment, os: 'mac' | 'linux' | 'win', name
   return env.packaged
     ? join(env.resourcesPath, 'helper', name)
     : join(env.appRoot, 'build', 'netd', `${os}-${buildDir(env.arch)}`, name)
+}
+
+function runnable(path: string): boolean {
+  try {
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function pkexecPath(usable: (path: string) => boolean = runnable): string | null {
+  return PKEXEC_PATHS.find(usable) ?? null
 }
 
 export function helperLocation(env: HelperEnvironment): HelperLocation | FailedLaunch {
@@ -142,7 +156,7 @@ export function helperLocation(env: HelperEnvironment): HelperLocation | FailedL
   if (env.platform === 'linux') {
     const bundled = bundledBinary(env, 'linux', 'lychee-netd')
     const candidates = env.packaged ? [LINUX_SYSTEM_HELPER, bundled] : [bundled]
-    const binary = candidates.find((candidate) => existsSync(candidate))
+    const binary = candidates.find(runnable)
     if (!binary) {
       return {
         kind: 'failed',
@@ -404,13 +418,23 @@ function failed(status: LaunchFailure, message: string): FailedLaunch {
   return { kind: 'failed', status, message }
 }
 
+export interface LauncherOptions {
+  pkexec?: () => string | null
+}
+
 export class NativeLauncher implements Launcher {
   private readonly env: HelperEnvironment
   private readonly log: (line: string) => void
+  private readonly pkexec: () => string | null
 
-  constructor(env: HelperEnvironment, log: (line: string) => void = (): void => {}) {
+  constructor(
+    env: HelperEnvironment,
+    log: (line: string) => void = (): void => {},
+    options: LauncherOptions = {}
+  ) {
     this.env = env
     this.log = log
+    this.pkexec = options.pkexec ?? pkexecPath
   }
 
   async launch(): Promise<LaunchResult> {
@@ -433,6 +457,11 @@ export class NativeLauncher implements Launcher {
 
   private async launchLinux(chosen: string, bundled: string | null): Promise<LaunchResult> {
     let binary = chosen
+    if (this.env.packaged && chosen !== LINUX_SYSTEM_HELPER && existsSync(LINUX_SYSTEM_HELPER)) {
+      this.log(
+        `${LINUX_SYSTEM_HELPER} is not executable by this user (only the lychee group may run it); using ${chosen}`
+      )
+    }
     const installed = await reportedVersion(binary, this.env.env)
     if (installed === null) {
       return failed('unavailable', `the network helper at ${binary} could not be run`)
@@ -462,13 +491,12 @@ export class NativeLauncher implements Launcher {
         return failed(status, message)
       }
     }
+    const pkexec = this.pkexec()
+    if (!pkexec) {
+      return failed('not_installed', 'the network helper needs pkexec, which is not installed')
+    }
     const path = LINUX_ROOT_CONTROL
-    const helper = spawnHelper(
-      'pkexec',
-      [binary, 'serve', '--control', path],
-      this.env.env,
-      this.log
-    )
+    const helper = spawnHelper(pkexec, [binary, 'serve', '--control', path], this.env.env, this.log)
     const early = await helper.exitWithin(EARLY_EXIT_MS)
     if (!early) return { kind: 'launched', process: helper, path }
     if (helper.spawnError?.code === 'ENOENT') {

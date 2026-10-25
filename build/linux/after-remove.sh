@@ -1,5 +1,25 @@
 #!/bin/bash
 
+removing_package() {
+  case $1 in
+    '' | 0 | remove | purge) return 0 ;;
+  esac
+  return 1
+}
+
+remove_netd() {
+  local dir=$2
+  if ! removing_package "$1"; then
+    return 0
+  fi
+  rm -f "$dir/lychee-netd"
+  rmdir "$dir" 2>/dev/null || true
+}
+
+if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+  return 0
+fi
+
 if type update-alternatives >/dev/null 2>&1; then
     update-alternatives --remove '${executable}' '/opt/${sanitizedProductName}/${executable}'
 else
@@ -17,5 +37,4 @@ if [ -f "$APPARMOR_PROFILE_DEST" ]; then
   rm -f "$APPARMOR_PROFILE_DEST"
 fi
 
-rm -f /usr/lib/lychee/lychee-netd
-rmdir /usr/lib/lychee 2>/dev/null || true
+remove_netd "$1" /usr/lib/lychee

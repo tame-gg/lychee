@@ -22,11 +22,12 @@ const targets = [
 ]
 
 const requested = parseTargets(process.argv.slice(2))
-const selected = requested ? targets.filter((t) => requested.has(t.dir)) : targets
-if (requested && selected.length === 0) {
-  console.error(`No matching --target; known targets: ${targets.map((t) => t.dir).join(', ')}`)
+const known = [...targets.map((t) => t.dir), 'win-arm64']
+if (requested && !known.some((dir) => requested.has(dir))) {
+  console.error(`No matching --target; known targets: ${known.join(', ')}`)
   process.exit(1)
 }
+const selected = requested ? targets.filter((t) => requested.has(t.dir)) : targets
 
 for (const t of selected) {
   const outDir = join(outRoot, t.dir)
@@ -53,7 +54,7 @@ for (const t of selected) {
     }
   )
   if (t.dir === 'win-x64') {
-    ensureWintun(outDir)
+    ensureWintun(outDir, requested !== null)
   }
 }
 
@@ -99,15 +100,19 @@ function hostTarget() {
   return `${os}-${arch}`
 }
 
-// Wintun is fetched and verified in L-2 (scripts/fetch-wintun.mjs). Until that lands, note that the
-// Windows build has no wintun.dll yet rather than failing the build.
-function ensureWintun(outDir) {
+// Wintun is fetched and verified in L-2 (scripts/fetch-wintun.mjs).
+function ensureWintun(outDir, required) {
   const fetch = join(root, 'scripts', 'fetch-wintun.mjs')
-  if (!existsSync(fetch)) {
-    console.log(
-      'note: wintun.dll is not fetched yet (scripts/fetch-wintun.mjs lands in L-2); win-x64 helper is incomplete until then'
-    )
+  if (existsSync(fetch)) {
+    execFileSync('node', [fetch, '--out', outDir], { cwd: root, stdio: 'inherit' })
+  }
+  const dll = join(outDir, 'wintun.dll')
+  if (existsSync(dll)) return
+  const reason = `${dll} is missing; a Windows helper cannot ship without Wintun (scripts/fetch-wintun.mjs has not landed, and no wintun.dll was placed there by hand)`
+  if (!required) {
+    console.warn(`build-netd: warning: ${reason}; the win-x64 helper is incomplete`)
     return
   }
-  execFileSync('node', [fetch, '--out', outDir], { cwd: root, stdio: 'inherit' })
+  console.error(`build-netd: ${reason}`)
+  process.exit(1)
 }

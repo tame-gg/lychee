@@ -15,6 +15,8 @@ import (
 const (
 	darwinRootDir  = "/var/run/lychee-netd"
 	darwinRootSock = darwinRootDir + "/netd.sock"
+
+	peerPidRequired = false
 )
 
 func Listen(path string) (*Transport, int, error) {
@@ -51,40 +53,33 @@ func Listen(path string) (*Transport, int, error) {
 	return &Transport{
 		Listener:  ln,
 		Auth:      AuthInfo{Model: "unix_peer_uid", Privilege: "root", UID: &uid},
-		PeerCheck: darwinPeerCheck(authUID),
+		PeerCheck: unixPeerCheck(authUID, socketPeerCredentials),
 		cleanup:   func() { unlinkIfInode(path, ino) },
 	}, ExitOK, nil
 }
 
-func darwinPeerCheck(authUID int) func(net.Conn) (PeerInfo, error) {
-	return func(nc net.Conn) (PeerInfo, error) {
-		ctrl, err := peerCredError(nc)
-		if err != nil {
-			return PeerInfo{}, err
-		}
-		var uid uint32
-		var pid int
-		var ce error
-		if err := ctrl(func(fd uintptr) {
-			var xu *unix.Xucred
-			xu, ce = unix.GetsockoptXucred(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
-			if ce != nil {
-				return
-			}
-			uid = xu.Uid
-			pid, _ = unix.GetsockoptInt(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERPID)
-		}); err != nil {
-			return PeerInfo{}, err
-		}
-		if ce != nil {
-			return PeerInfo{}, ce
-		}
-		info := PeerInfo{UID: int(uid), PID: pid}
-		if !decideUnixPeer(uid, uint32(pid), authUID, false) {
-			return info, fmt.Errorf("uid=%d not authorized", uid)
-		}
-		return info, nil
+func socketPeerCredentials(nc net.Conn) (peerCredentials, error) {
+	ctrl, err := peerCredError(nc)
+	if err != nil {
+		return peerCredentials{}, err
 	}
+	var cred peerCredentials
+	var ce error
+	if err := ctrl(func(fd uintptr) {
+		var xu *unix.Xucred
+		xu, ce = unix.GetsockoptXucred(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
+		if ce != nil {
+			return
+		}
+		pid, _ := unix.GetsockoptInt(int(fd), unix.SOL_LOCAL, unix.LOCAL_PEERPID)
+		cred = peerCredentials{uid: xu.Uid, pid: uint32(pid)}
+	}); err != nil {
+		return peerCredentials{}, err
+	}
+	if ce != nil {
+		return peerCredentials{}, ce
+	}
+	return cred, nil
 }
 
 func CheckPrivilege() (int, error) {
