@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { accessSync, constants, existsSync, readFileSync } from 'node:fs'
+import { accessSync, constants, existsSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
@@ -598,8 +598,11 @@ export function parseExitReport(text: string): { exit: HelperExit; stderr: strin
   return { exit: { code, signal: null }, stderr: rest.join('\n') }
 }
 
+const EXIT_POLL_MS = 250
+
 function watchedHelper(controlPath: string): HelperProcess {
   const report = exitReportPath(controlPath)
+  const started = Date.now()
   let exit: HelperExit | null = null
   let stderr = ''
   let settled = false
@@ -618,16 +621,24 @@ function watchedHelper(controlPath: string): HelperProcess {
     resolveExit(next)
   }
   if (report) {
+    try {
+      rmSync(report, { force: true })
+    } catch (error) {
+      void error
+    }
     timer = setInterval(() => {
       let text: string
+      let mtimeMs = 0
       try {
+        mtimeMs = statSync(report).mtimeMs
         text = readFileSync(report, 'utf8')
       } catch {
         return
       }
+      if (mtimeMs < started) return
       const parsed = parseExitReport(text)
       if (parsed) finish(parsed.exit, parsed.stderr)
-    }, 50)
+    }, EXIT_POLL_MS)
     timer.unref()
   }
   return {
