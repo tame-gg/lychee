@@ -151,9 +151,15 @@ export function whoamiExe(env: NodeJS.ProcessEnv): string {
   return join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'whoami.exe')
 }
 
+export function powershellEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const next = { ...env }
+  delete next.PSModulePath
+  return next
+}
+
 function run(env: NodeJS.ProcessEnv, file: string, args: string[]): string {
   return execFileSync(file, args, {
-    env,
+    env: powershellEnv(env),
     encoding: 'utf8',
     windowsHide: true,
     maxBuffer: 8 * 1024 * 1024
@@ -246,7 +252,7 @@ function execPowerShell(env: NodeJS.ProcessEnv, command: string): void {
         '-Command',
         command
       ],
-      { env, encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024 }
+      { env: powershellEnv(env), encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024 }
     )
   } catch (error) {
     const failed = error as { stdout?: string; stderr?: string; message?: string }

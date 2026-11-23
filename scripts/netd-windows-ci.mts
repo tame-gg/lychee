@@ -7,6 +7,7 @@ import { controlHandshake, type ControlHello } from './netd-handshake.mts'
 import {
   installWindowsHelper,
   installedAclProblem,
+  powershellEnv,
   powershellExe,
   queryWindowsTask,
   readPipeSddl,
@@ -39,7 +40,7 @@ function ps(command: string, env: NodeJS.ProcessEnv = process.env): string {
   return execFileSync(
     powershellExe(env),
     ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', command],
-    { env, encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024 }
+    { env: powershellEnv(env), encoding: 'utf8', windowsHide: true, maxBuffer: 8 * 1024 * 1024 }
   )
 }
 
@@ -82,6 +83,7 @@ function proveStandardAccount(secret: string): void {
   const output = ps(
     `
 $ErrorActionPreference = 'Stop'
+Import-Module Microsoft.PowerShell.Security
 Start-Service seclogon -ErrorAction SilentlyContinue
 $sec = ConvertTo-SecureString $env:LYCHEE_CI_PASS -AsPlainText -Force
 if (Get-LocalUser -Name $env:LYCHEE_CI_USER -ErrorAction SilentlyContinue) {
@@ -140,6 +142,7 @@ function provePipeDenied(pipe: string, secret: string): void {
   const output = ps(
     `
 $ErrorActionPreference = 'Stop'
+Import-Module Microsoft.PowerShell.Security
 $sec = ConvertTo-SecureString $env:LYCHEE_CI_PASS -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential ("$env:COMPUTERNAME\\$env:LYCHEE_CI_USER", $sec)
 $script = Join-Path $env:LYCHEE_CI_DIR 'open-pipe.ps1'
