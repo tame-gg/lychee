@@ -1,4 +1,5 @@
 import { validWeight } from '@shared/mergeSettings'
+import { TAILSCALE_EXIT_NODE_MESSAGE } from '@shared/mergeMessages'
 import {
   MERGE_HISTORY_SECONDS,
   type MergeAdapter,
@@ -45,6 +46,7 @@ const OUTCOME_MESSAGES: Partial<Record<MergeStatus, string>> = {
   out_of_date: 'the network helper speaks protocol [2], Lychee speaks 1',
   unsupported: 'this computer has no TUN driver (/dev/net/tun)',
   another_tool: 'another connection-merging tool is running',
+  exit_node: TAILSCALE_EXIT_NODE_MESSAGE,
   unavailable: 'could not connect to the network helper: connect ECONNREFUSED'
 }
 
@@ -56,6 +58,7 @@ const LAUNCH_FAILURES = new Set<MergeStatus>([
   'out_of_date',
   'unsupported',
   'another_tool',
+  'exit_node',
   'unavailable'
 ])
 
@@ -155,6 +158,7 @@ export function createMockMergeBackend(options: MockMergeOptions): MergeBackend 
       adapters: adapters.map((adapter) => ({ ...adapter })),
       skipped: running ? SKIPPED : [],
       discoverySeq: running ? 1 : 0,
+      limited: {},
       history: {
         down: Object.fromEntries(Object.entries(history.down).map(([k, v]) => [k, [...v]])),
         up: Object.fromEntries(Object.entries(history.up).map(([k, v]) => [k, [...v]]))

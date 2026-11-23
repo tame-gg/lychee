@@ -5,6 +5,7 @@ import { useNetworkVisuals } from '../hooks/useNetworkVisuals'
 import { useAppStore } from '../store/useAppStore'
 import { useFormatSpeed, useFormatSpeedLimit } from '../hooks/useFormatSpeed'
 import { formatDataUsage } from '../utils/format'
+import { lycheeBytesPerSec } from '../utils/merge'
 import { NetworkEditPopover } from './NetworkEditPopover'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { Button } from './ui/button'
@@ -28,14 +29,7 @@ export function NetworksMenu({
   const [open, setOpen] = useState(false)
   const usage = useNetworkUsage(open)
 
-  // Every running download's speed over each network, added up.
-  const speeds = new Map<string, number>()
-  for (const download of Object.values(downloads)) {
-    if (download.status !== 'downloading') continue
-    for (const network of download.networks) {
-      speeds.set(network.id, (speeds.get(network.id) ?? 0) + network.speedBytesPerSec)
-    }
-  }
+  const speeds = lycheeBytesPerSec(downloads)
   const total = [...speeds.values()].reduce((sum, speed) => sum + speed, 0)
 
   return (
@@ -59,7 +53,7 @@ export function NetworksMenu({
             {interfaces.length} {interfaces.length === 1 ? 'network' : 'networks'}
             {total > 0 && (
               <span className="font-mono text-[11.5px] text-muted-foreground">
-                {formatSpeed(total)}
+                Lychee {formatSpeed(total)}
               </span>
             )}
           </>
@@ -114,7 +108,7 @@ export function NetworksMenu({
                       : undefined
                 }
               >
-                {reached ? 'Paused' : speed > 0 ? formatSpeed(speed) : 'Idle'}
+                {reached ? 'Paused' : speed > 0 ? `Lychee ${formatSpeed(speed)}` : 'Idle'}
               </div>
               <button
                 type="button"

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { mergeTests, type Page } from '@playwright/test'
-import type { MergeState } from '../src/shared/types'
+import type { HttpDownloadUpdate, MergeState } from '../src/shared/types'
 import { test, expect } from './fixtures'
 import { test as netdTest } from './netd/harness'
 
@@ -125,10 +126,97 @@ test.describe('with the simulated helper', () => {
   })
 })
 
+helperTest(
+  'each row says how much of that connection is Lychee, from the helper rates',
+  async ({ lychee, netd }) => {
+    const fake = await netd.start({
+      helperVersion: version,
+      sampler: ({ adapter }) => ({
+        link_in_bps: adapter.name === 'en0' ? 400_000 : 250_000,
+        link_out_bps: 8_000
+      })
+    })
+    const page = lychee.page
+    await openNetworkPage(page)
+    await page.getByRole('switch', { name: 'Combine connections' }).click()
+    await expect(statusWord(page)).toHaveText('Merging')
+    const table = page.getByRole('table', { name: 'Connections' })
+    const en0 = table.getByRole('row', { name: 'en0' })
+    const en7 = table.getByRole('row', { name: 'en7' })
+    await expect(en0).toContainText('Lychee 0 B/s of 390.6 KB/s')
+    await expect(en7).toContainText('Lychee 0 B/s of 244.1 KB/s')
+
+    const update: HttpDownloadUpdate = {
+      seq: 1,
+      blocks: [],
+      state: {
+        id: 'lychee-share',
+        kind: 'http',
+        url: 'https://example.test/file.bin',
+        fileName: 'file.bin',
+        destinationPath: '/tmp/file.bin',
+        totalBytes: 1000,
+        bytesDownloaded: 100,
+        speedBytesPerSec: 125_000,
+        status: 'downloading',
+        startedAt: 1,
+        networks: [
+          {
+            id: 'en0',
+            label: 'en0',
+            kind: 'ethernet',
+            enabled: true,
+            status: 'on',
+            bytesDownloaded: 100,
+            speedBytesPerSec: 125_000,
+            retries: 0,
+            transfer: 'http'
+          }
+        ],
+        streams: [],
+        peakStreams: 1,
+        totalBlocks: 0,
+        blockSizeBytes: 1024
+      }
+    }
+    await lychee.evaluateMain(({ BrowserWindow }, payload) => {
+      BrowserWindow.getAllWindows()[0]?.webContents.send('download:updated', payload)
+    }, update)
+    await expect(en0).toContainText('Lychee 122.1 KB/s of 390.6 KB/s')
+    await expect(en7).toContainText('Lychee 0 B/s of 244.1 KB/s')
+
+    await page
+      .getByRole('checkbox', {
+        name: 'Leave en0 out of combining when it is metered or its data limit is reached'
+      })
+      .click()
+    await expect
+      .poll(async () => {
+        const saved = JSON.parse(
+          await readFile(join(lychee.dirs.userData, 'app-settings.json'), 'utf8')
+        ) as {
+          networkPreferences?: { en0?: { excludeFromMergeWhenLimited?: boolean } }
+        }
+        return saved.networkPreferences?.en0?.excludeFromMergeWhenLimited
+      })
+      .toBe(true)
+
+    await page.evaluate(async () => {
+      await window.lychee.updateSettings({
+        networkPreferences: { en0: { metered: true, excludeFromMergeWhenLimited: true } }
+      })
+    })
+    await expect(en0).toContainText('Left out of combining: this connection is metered')
+    await expect(page.getByRole('checkbox', { name: 'Combine en0' })).not.toBeChecked()
+    await expect.poll(() => fake.view.excluded).toContain('en0')
+  }
+)
+
 for (const [outcome, word] of [
   ['not_installed', 'Helper not installed'],
   ['needs_permission', 'Needs permission'],
   ['another_tool', 'Another connection-merging tool is running'],
+  ['exit_node', 'Tailscale exit node'],
   ['paused_auto', 'Paused: one connection']
 ] as const) {
   test.describe(`simulated ${outcome}`, () => {

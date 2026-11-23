@@ -7,6 +7,7 @@ import type { BrowserWindow } from 'electron'
 import { app, Notification, powerSaveBlocker, safeStorage, shell } from 'electron'
 import { scheduleWindow } from '../../shared/downloadSchedule'
 import { IpcChannels } from '../../shared/ipc-channels'
+import { type NetworkLimitFact } from '../../shared/mergeLimits'
 import {
   DOWNLOADS_AT_ONCE,
   SPEED_HISTORY_SECONDS,
@@ -23,6 +24,7 @@ import {
   type HttpDownloadNetwork,
   type HttpDownloadState,
   type NetworkInterfaceInfo,
+  type NetworkPreferences,
   type NetworkStatus,
   type HttpProbeResult,
   type StartDownloadRequest,
@@ -366,6 +368,8 @@ export class DownloadManager {
   private downloadsAtOnce = DOWNLOADS_AT_ONCE.default
   /** Speed and data limits, for every download together. */
   readonly limits = new Limits(() => this.limitsChanged())
+  private networkPreferences: NetworkPreferences = {}
+  private limitsListener: (() => void) | null = null
 
   constructor(
     private getWindow: () => BrowserWindow | null,
@@ -402,6 +406,7 @@ export class DownloadManager {
       }
     }
     this.downloadsAtOnce = settings.downloadsAtOnce ?? DOWNLOADS_AT_ONCE.default
+    this.networkPreferences = settings.networkPreferences ?? {}
     this.limits.configure(settings)
     await this.refreshSchedule()
     this.limitsChanged()
@@ -416,6 +421,27 @@ export class DownloadManager {
     this.limitsChanged()
   }
 
+  setLimitsListener(listener: () => void): void {
+    this.limitsListener = listener
+    void this.initialization.then(() => {
+      if (this.limitsListener === listener) listener()
+    })
+  }
+
+  limitFacts(): Record<string, NetworkLimitFact> {
+    const used = this.limits.usedByPeriod()
+    const facts: Record<string, NetworkLimitFact> = {}
+    for (const [id, preference] of Object.entries(this.networkPreferences)) {
+      facts[id] = {
+        metered: preference.metered === true,
+        excludeWhenLimited: preference.excludeFromMergeWhenLimited === true,
+        dataLimit: preference.dataLimit,
+        used: used[id] ?? 0
+      }
+    }
+    return facts
+  }
+
   private limitsChanged(): void {
     for (const runtime of this.runtimes.values()) {
       const { status } = runtime.state
@@ -423,6 +449,7 @@ export class DownloadManager {
       this.reconcile(runtime)
       this.scheduleUpdate(runtime)
     }
+    this.limitsListener?.()
   }
 
   private armScheduleTimer(): void {
