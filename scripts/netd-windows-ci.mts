@@ -97,37 +97,21 @@ if ($listed -match ('(?m)^\\s*' + [regex]::Escape($env:LYCHEE_CI_USER) + '\\s*$'
 $cred = New-Object System.Management.Automation.PSCredential ("$env:COMPUTERNAME\\$env:LYCHEE_CI_USER", $sec)
 $exe = Join-Path $env:LYCHEE_CI_DIR 'lychee-netd.exe'
 $errFile = Join-Path $env:LYCHEE_CI_DIR 'stderr.txt'
-try {
-  $p = Start-Process -FilePath $exe -ArgumentList @('serve','--control','\\\\.\\pipe\\lychee-netd-needs-admin') -Credential $cred -WorkingDirectory $env:LYCHEE_CI_DIR -WindowStyle Hidden -PassThru -RedirectStandardError $errFile
-  if (-not $p.WaitForExit(20000)) {
-    Stop-Process -Id $p.Id -Force
-    throw 'the standard-account helper did not exit'
-  }
-  $p.WaitForExit() | Out-Null
-  if ($null -eq $p.ExitCode) { throw 'the helper exited without a code' }
-  Write-Output ('exit=' + $p.ExitCode)
-  Get-Content -LiteralPath $errFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_ }
-} catch {
-  Write-Output ('credential-failed=' + $_.Exception.Message)
-  & schtasks.exe /Create /TN ${probeTask} /TR ("\`"" + $exe + "\`" serve --control \\\\.\\pipe\\lychee-netd-needs-admin") /SC ONCE /ST 00:00 /RL LIMITED /RU ("$env:COMPUTERNAME\\$env:LYCHEE_CI_USER") /RP $env:LYCHEE_CI_PASS /F
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-  & schtasks.exe /Run /TN ${probeTask}
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-  $deadline = (Get-Date).AddSeconds(30)
-  do {
-    Start-Sleep -Milliseconds 500
-    $q = & schtasks.exe /Query /TN ${probeTask} /V /FO LIST | Out-String
-    if ($q -notmatch 'Status:\\s+Running') {
-      $result = ([regex]::Match($q, 'Last Result:\\s+(\\S+)')).Groups[1].Value
-      Write-Output ('exit=' + $result)
-      Write-Output $q
-      & schtasks.exe /Delete /TN ${probeTask} /F | Out-Null
-      exit 0
-    }
-  } while ((Get-Date) -lt $deadline)
-  & schtasks.exe /Delete /TN ${probeTask} /F | Out-Null
-  throw 'the standard-account task did not finish'
+$codeFile = Join-Path $env:LYCHEE_CI_DIR 'exitcode.txt'
+$runner = Join-Path $env:LYCHEE_CI_DIR 'run-as-user.cmd'
+Set-Content -LiteralPath $runner -Encoding ASCII -Value @(
+  '@echo off',
+  '"' + $exe + '" serve --control \\\\.\\pipe\\lychee-netd-needs-admin > "' + $errFile + '" 2>&1',
+  '(echo %ERRORLEVEL%)> "' + $codeFile + '"'
+)
+$p = Start-Process -FilePath "$env:SystemRoot\\System32\\cmd.exe" -ArgumentList @('/c', $runner) -Credential $cred -WorkingDirectory $env:LYCHEE_CI_DIR -WindowStyle Hidden -PassThru
+if (-not $p.WaitForExit(20000)) {
+  Stop-Process -Id $p.Id -Force
+  throw 'the standard-account helper did not exit'
 }
+if (-not (Test-Path -LiteralPath $codeFile)) { throw 'the standard account wrote no exit code' }
+Write-Output ('exit=' + (Get-Content -LiteralPath $codeFile -Raw).Trim())
+if (Test-Path -LiteralPath $errFile) { Get-Content -LiteralPath $errFile }
 `.trim(),
     { ...process.env, LYCHEE_CI_PASS: secret, LYCHEE_CI_USER: account, LYCHEE_CI_DIR: probeDir }
   )
