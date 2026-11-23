@@ -103,6 +103,8 @@ try {
     Stop-Process -Id $p.Id -Force
     throw 'the standard-account helper did not exit'
   }
+  $p.WaitForExit() | Out-Null
+  if ($null -eq $p.ExitCode) { throw 'the helper exited without a code' }
   Write-Output ('exit=' + $p.ExitCode)
   Get-Content -LiteralPath $errFile -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_ }
 } catch {

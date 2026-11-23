@@ -10,7 +10,13 @@ func TestFrameTooLargeCloses(t *testing.T) {
 	h := startHarness(t, nil)
 	c := h.dial()
 	c.hello()
-	c.sendRaw(append([]byte(strings.Repeat("a", 70000)), '\n'))
+	payload := append([]byte(strings.Repeat("a", 70000)), '\n')
+	if _, err := c.conn.Write(payload); err != nil {
+		msg := err.Error()
+		if !strings.Contains(msg, "broken pipe") && !strings.Contains(msg, "connection reset") && !strings.Contains(msg, "forcibly closed") {
+			t.Fatal(err)
+		}
+	}
 	resp := c.mustFrame()
 	if errCode(resp) != "frame_too_large" {
 		t.Fatalf("want frame_too_large, got %v", resp)
