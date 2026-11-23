@@ -518,6 +518,40 @@ test.describe('reconnect', () => {
     expect(fake.connections).toBeGreaterThan(3)
   })
 
+  test('exit 4 while merging is stopped with the helper stderr mapped in', async ({
+    make,
+    netd
+  }) => {
+    const h = make()
+    await h.controller.start()
+    await h.controller.setMerging(true)
+    netd.clock.advance(1000)
+    await expect.poll(() => h.controller.state().history.down.en0?.length).toBe(2)
+    const kept = h.controller.state().history.down.en0
+    h.launcher.fake.crash(4)
+    await expect.poll(() => h.status()).toBe('stopped')
+    expect(h.controller.state().message).toBe(`${STOPPED_MESSAGE}: crash`)
+    expect(h.controller.state().history.down.en0).toEqual(kept)
+    expect(h.logs.some((line) => line.startsWith('watchdog:') && line.includes('exit 4'))).toBe(
+      true
+    )
+  })
+
+  test('exit 6 while merging is stopped with the administrator-account message', async ({
+    make,
+    netd
+  }) => {
+    const h = make()
+    await h.controller.start()
+    await h.controller.setMerging(true)
+    netd.clock.advance(1000)
+    await expect.poll(() => h.controller.state().history.down.en0?.length).toBe(2)
+    h.launcher.fake.crash(6)
+    await expect.poll(() => h.status()).toBe('stopped')
+    expect(h.controller.state().message).toBe(`${STOPPED_MESSAGE}: ${ADMIN_ACCOUNT_MESSAGE}`)
+    expect(h.controller.state().history.down.en0).toHaveLength(2)
+  })
+
   test('a new helper after a crash gets the settings applied again', async ({ make }) => {
     const h = make({ settings: { ipv6: 'off', excluded: ['en7'] } })
     await h.controller.start()

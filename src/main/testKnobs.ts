@@ -23,6 +23,7 @@ export const testKnobs = {
   /** Keeps the window off-screen so a test run doesn't pop windows up over the desktop. */
   hideWindow: env['LYCHEE_E2E_HIDE_WINDOW'] === '1',
   netdControlPath: env['LYCHEE_E2E_NETD'] || undefined,
+  diagnosticsPath: env['LYCHEE_E2E_DIAGNOSTICS'] || undefined,
   /** `LYCHEE_NETWORK_PAGE=1` shows the Network page; `mock` (or `mock:<status>`, e.g.
    * `mock:not_installed`) drives it from a simulation instead of the helper. */
   networkPage: networkPageMode(env['LYCHEE_NETWORK_PAGE']),

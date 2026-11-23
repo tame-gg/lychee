@@ -69,6 +69,7 @@ const lycheeApi = {
   setMergeNetwork: (id: string, enabled: boolean) => invoke('setMergeNetwork', id, enabled),
   setMergeWeight: (id: string, weight: number | 'auto') => invoke('setMergeWeight', id, weight),
   repairNetwork: () => invoke('repairNetwork'),
+  exportDiagnostics: () => invoke('exportDiagnostics'),
 
   /** pendingLinks() has the new link. */
   onLinkReceived: (callback: () => void): (() => void) => {

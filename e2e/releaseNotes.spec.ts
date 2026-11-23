@@ -156,6 +156,37 @@ test('the shipped changelog has an entry for the current version @smoke', () => 
   )
   expect(run.status).toBe(0)
   expect(run.stdout).toMatch(/^- \*\*/m)
+  expect(run.stdout).not.toContain('each time merging starts')
+})
+
+test('a release that changes lychee-netd says when an administrator password is asked', () => {
+  const root = test.info().outputPath('release-netd')
+  const script = prepareRelease(root, builds('1.2.0'))
+  writeFileSync(
+    join(root, 'release/changelog.js'),
+    `module.exports.LycheeChangelog = ${JSON.stringify([
+      {
+        version: 'v1.2.0',
+        netd: true,
+        items: [
+          {
+            kind: 'improved',
+            title: 'Network helper',
+            text: 'The network helper was updated.'
+          }
+        ]
+      }
+    ])}\n`
+  )
+  const notes = spawnSync(process.execPath, [script, 'v1.2.0', '--changelog'], {
+    encoding: 'utf8'
+  })
+  expect(notes.status, notes.stderr).toBe(0)
+  expect(notes.stdout).toContain('each time merging starts')
+  expect(notes.stdout).toContain(
+    'macOS and the Linux AppImage ask for an administrator password each time merging starts; Linux deb installs need nothing extra.'
+  )
+  expect(notes.stdout).toContain('Network helper')
 })
 
 test('the v0.1.0 changelog entry keeps its release notes', () => {
