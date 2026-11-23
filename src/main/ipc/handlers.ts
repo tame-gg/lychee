@@ -125,6 +125,9 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
     },
     log: (line) => console.log(`[lychee-netd] ${line}`)
   })
+  manager.setLimitsListener(() => {
+    void merge.syncLimitedNetworks(manager.limitFacts())
+  })
   void merge
     .start()
     .catch((error) => console.error('[lychee] network helper failed to start', error))

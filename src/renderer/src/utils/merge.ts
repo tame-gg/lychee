@@ -1,10 +1,14 @@
+import { TAILSCALE_EXIT_NODE_MESSAGE } from '@shared/mergeMessages'
 import type {
+  DownloadState,
+  LimitExcludeReason,
   MergeAdapter,
   MergeLinkState,
   MergeState,
   MergeStatus,
   NetworkInterfaceInfo,
-  NetworkInterfaceKind
+  NetworkInterfaceKind,
+  NetworkPreferences
 } from '@shared/types'
 
 /** How a status reads: `active` merging, `idle` nothing to do, `busy` on its way, `attention`
@@ -60,6 +64,11 @@ const STATUS: Record<MergeStatus, { label: string; tone: MergeTone; hint: string
     label: 'Another connection-merging tool is running',
     tone: 'attention',
     hint: 'Quit or uninstall the other tool, then switch combining on again.'
+  },
+  exit_node: {
+    label: 'Tailscale exit node',
+    tone: 'attention',
+    hint: TAILSCALE_EXIT_NODE_MESSAGE
   },
   unavailable: { label: 'Helper unavailable', tone: 'error', hint: null }
 }
@@ -126,11 +135,31 @@ export interface MergeRowModel {
   excluded: boolean
   /** A pinned weight, from the settings. */
   manualWeight: number | undefined
+  excludeWhenLimited: boolean
+  limitReason: LimitExcludeReason | null
+}
+
+export function lycheeBytesPerSec(downloads: Record<string, DownloadState>): Map<string, number> {
+  const speeds = new Map<string, number>()
+  for (const download of Object.values(downloads)) {
+    if (download.status !== 'downloading') continue
+    for (const network of download.networks) {
+      speeds.set(network.id, (speeds.get(network.id) ?? 0) + network.speedBytesPerSec)
+    }
+  }
+  return speeds
+}
+
+export function limitExcludeText(reason: LimitExcludeReason): string {
+  return reason === 'metered'
+    ? 'Left out of combining: this connection is metered'
+    : 'Left out of combining: its data limit is reached'
 }
 
 export function mergeRows(
   merging: MergeState,
-  interfaces: NetworkInterfaceInfo[]
+  interfaces: NetworkInterfaceInfo[],
+  preferences: NetworkPreferences = {}
 ): MergeRowModel[] {
   const byId = new Map(interfaces.map((iface) => [iface.id, iface]))
   const row = (id: string, adapter: MergeAdapter | null): MergeRowModel => {
@@ -140,8 +169,10 @@ export function mergeRows(
       kind: iface?.kind ?? guessKind(id),
       osName: iface?.displayName ?? id,
       adapter,
-      excluded: merging.settings.excluded.includes(id),
-      manualWeight: merging.settings.weights[id]
+      excluded: merging.settings.excluded.includes(id) || merging.limited[id] !== undefined,
+      manualWeight: merging.settings.weights[id],
+      excludeWhenLimited: preferences[id]?.excludeFromMergeWhenLimited === true,
+      limitReason: merging.limited[id] ?? null
     }
   }
   if (merging.adapters.length > 0) {

@@ -68,6 +68,7 @@ export function initialMergeState(settings: MergeSettings): MergeState {
     adapters: [],
     skipped: [],
     discoverySeq: 0,
-    history: { down: {}, up: {} }
+    history: { down: {}, up: {} },
+    limited: {}
   }
 }

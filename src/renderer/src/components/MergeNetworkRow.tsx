@@ -4,7 +4,7 @@ import { EthernetPort, Usb, Wifi } from 'lucide-react'
 import { useState } from 'react'
 import { useFormatSpeed } from '../hooks/useFormatSpeed'
 import { DANGER, type NetworkVisual } from '../theme'
-import { formatWeight, LINK_STATE_TEXT, type MergeRowModel } from '../utils/merge'
+import { formatWeight, limitExcludeText, LINK_STATE_TEXT, type MergeRowModel } from '../utils/merge'
 import { NetworkEditPopover } from './NetworkEditPopover'
 import { TruncatedText } from './TruncatedText'
 import { Button } from './ui/button'
@@ -146,12 +146,16 @@ function WeightCell({
 export function MergeNetworkRow({
   row,
   visual,
+  lycheeBytesPerSec,
   onSwitch,
+  onExcludeWhenLimited,
   onWeight
 }: {
   row: MergeRowModel
   visual: NetworkVisual
+  lycheeBytesPerSec: number
   onSwitch: (enabled: boolean) => void
+  onExcludeWhenLimited: (on: boolean) => void
   onWeight: (weight: number | 'auto') => void
 }): React.JSX.Element {
   const formatSpeed = useFormatSpeed()
@@ -185,24 +189,40 @@ export function MergeNetworkRow({
           opacity: relaying || down ? 1 : 0.65
         }}
       />
-      <div role="cell" className="flex min-w-0 items-center gap-[6px]">
-        <Checkbox
-          checked={used}
-          onCheckedChange={(checked) => onSwitch(checked)}
-          aria-label={`Combine ${visual.name}`}
-          className="shrink-0 data-checked:border-transparent"
-          style={used ? { background: visual.solid, color: visual.onSolid } : undefined}
-        />
-        <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-        <TruncatedText
-          text={visual.name}
-          className={`font-sans text-[12.5px] leading-[1.2] font-semibold ${used ? 'text-foreground' : 'text-[var(--text-secondary)]'}`}
-        />
-        <NetworkEditPopover interfaceId={row.id} interfaceKind={row.kind} osName={row.osName} />
-        {visual.name !== row.osName && (
-          <span className="rounded-[3px] border-[0.5px] border-border bg-secondary px-[4.5px] py-[1.5px] font-mono text-[9px] leading-none whitespace-nowrap text-muted-foreground">
-            {row.osName}
-          </span>
+      <div role="cell" className="flex min-w-0 flex-col justify-center gap-1">
+        <div className="flex min-w-0 items-center gap-[6px]">
+          <Checkbox
+            checked={used}
+            onCheckedChange={(checked) => onSwitch(checked)}
+            aria-label={`Combine ${visual.name}`}
+            className="shrink-0 data-checked:border-transparent"
+            style={used ? { background: visual.solid, color: visual.onSolid } : undefined}
+          />
+          <Icon aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <TruncatedText
+            text={visual.name}
+            className={`font-sans text-[12.5px] leading-[1.2] font-semibold ${used ? 'text-foreground' : 'text-[var(--text-secondary)]'}`}
+          />
+          <NetworkEditPopover interfaceId={row.id} interfaceKind={row.kind} osName={row.osName} />
+          {visual.name !== row.osName && (
+            <span className="rounded-[3px] border-[0.5px] border-border bg-secondary px-[4.5px] py-[1.5px] font-mono text-[9px] leading-none whitespace-nowrap text-muted-foreground">
+              {row.osName}
+            </span>
+          )}
+        </div>
+        <label className="flex items-center gap-1.5 text-[11px] leading-[1.3] text-muted-foreground">
+          <Checkbox
+            checked={row.excludeWhenLimited}
+            onCheckedChange={(checked) => onExcludeWhenLimited(checked === true)}
+            aria-label={`Leave ${visual.name} out of combining when it is metered or its data limit is reached`}
+            className="size-3.5"
+          />
+          Leave out when metered or at its data limit
+        </label>
+        {row.limitReason && (
+          <p className="text-[11px] leading-[1.3] text-[var(--color-usb-text)]">
+            {limitExcludeText(row.limitReason)}
+          </p>
         )}
       </div>
       <div
@@ -257,6 +277,12 @@ export function MergeNetworkRow({
           <span aria-hidden>↑ </span>
           {adapter ? formatSpeed(adapter.link_out_bps) : '—'}
         </div>
+        {adapter && (
+          <div className="font-medium text-muted-foreground">
+            Lychee {formatSpeed(Math.min(lycheeBytesPerSec, adapter.link_in_bps))} of{' '}
+            {formatSpeed(adapter.link_in_bps)}
+          </div>
+        )}
       </div>
     </div>
   )

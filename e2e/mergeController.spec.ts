@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { Socket } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
+import { TAILSCALE_EXIT_NODE_MESSAGE } from '../src/shared/mergeMessages'
 import { DEFAULT_MERGE_SETTINGS } from '../src/shared/mergeSettings'
 import type { MergeSettings, MergeState } from '../src/shared/types'
 import {
@@ -100,6 +103,7 @@ interface HarnessOptions {
   timing?: Partial<MergeTiming>
   platform?: NodeJS.Platform
   connect?: (path: string) => Socket
+  readTailscaleStatus?: () => Promise<string | null>
 }
 
 const test = base.extend<{ make: (options?: HarnessOptions) => Harness }>({
@@ -125,6 +129,7 @@ const test = base.extend<{ make: (options?: HarnessOptions) => Harness }>({
         log: (line) => logs.push(line),
         platform: options.platform ?? 'linux',
         connect: options.connect,
+        readTailscaleStatus: options.readTailscaleStatus ?? (async () => null),
         timing: {
           connectRetryMs: 20,
           connectTimeoutMs: 1500,
@@ -551,6 +556,82 @@ test.describe('pushes', () => {
     expect(h.pushes.length).toBeGreaterThan(count)
     expect(h.pushes.at(-1)?.status).toBe('off')
   })
+})
+
+test('an active Tailscale exit node refuses to merge and does not start the helper', async ({
+  make
+}) => {
+  const status = readFileSync(
+    join(__dirname, '../src/main/network/merge/fixtures/tailscale-exit-node-on.json'),
+    'utf8'
+  )
+  const h = make({ readTailscaleStatus: async () => status, settings: { enabled: true } })
+  await h.controller.start()
+  expect(h.launcher.calls).toBe(0)
+  expect(h.status()).toBe('exit_node')
+  expect(h.controller.state().message).toBe(TAILSCALE_EXIT_NODE_MESSAGE)
+  expect(h.stored().enabled).toBe(false)
+
+  await h.controller.setMerging(true)
+  expect(h.launcher.calls).toBe(0)
+  expect(h.status()).toBe('exit_node')
+  expect(h.stored().enabled).toBe(false)
+})
+
+test('a metered or capped network is left out of merging only when that option is on', async ({
+  make
+}) => {
+  const h = make()
+  await h.controller.start()
+  await h.controller.setMerging(true)
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: true, excludeWhenLimited: false, used: 50, dataLimit: 10 },
+    en7: { metered: false, excludeWhenLimited: true, used: 3, dataLimit: 10 }
+  })
+  expect(h.launcher.fake.view.excluded).toEqual([])
+  expect(h.controller.state().limited).toEqual({})
+
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: true, excludeWhenLimited: true, used: 0 }
+  })
+  await expect.poll(() => h.launcher.fake.view.excluded).toEqual(['en0'])
+  expect(h.controller.state().limited).toEqual({ en0: 'metered' })
+  expect(h.stored().excluded).toEqual([])
+
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: false, excludeWhenLimited: true, dataLimit: 100, used: 100 }
+  })
+  expect(h.controller.state().limited).toEqual({ en0: 'cap' })
+  expect(h.launcher.fake.view.excluded).toEqual(['en0'])
+
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: false, excludeWhenLimited: true, dataLimit: 100, used: 40 }
+  })
+  await expect.poll(() => h.launcher.fake.view.excluded).toEqual([])
+  expect(h.controller.state().limited).toEqual({})
+})
+
+test('turning a network back on does not keep a later data cap from leaving it out', async ({
+  make
+}) => {
+  const h = make()
+  await h.controller.start()
+  await h.controller.setMerging(true)
+  await h.controller.setNetwork('en0', false)
+  await h.controller.setNetwork('en0', true)
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: false, excludeWhenLimited: true, dataLimit: 100, used: 100 }
+  })
+  await expect.poll(() => h.launcher.fake.view.excluded).toEqual(['en0'])
+  expect(h.controller.state().limited).toEqual({ en0: 'cap' })
+
+  await h.controller.setNetwork('en0', true)
+  expect(h.controller.state().limited).toEqual({})
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: false, excludeWhenLimited: true, dataLimit: 100, used: 100 }
+  })
+  expect(h.controller.state().limited).toEqual({})
+  expect(h.launcher.fake.view.excluded).toEqual([])
 })
 
 test.describe('shutdown', () => {

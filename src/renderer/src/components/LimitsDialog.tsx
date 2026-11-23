@@ -400,7 +400,9 @@ function NetworkPage({
       <section className={sectionClass}>
         <h4 className={headingClass}>Data limit</h4>
         <p className={hintClass}>
-          Stops downloads on {name} at the limit. Uploads and other apps don’t count.
+          Stops downloads on {name} at the limit. Uploads and other apps don’t count. While Combine
+          connections is on, other apps can still use this network, and that traffic is not part of
+          this allowance.
         </p>
         <LimitChoice
           label={`${name} data limit`}
@@ -445,6 +447,36 @@ function NetworkPage({
             </p>
           </>
         )}
+        <label className="flex items-start justify-between gap-4 pt-1">
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="text-[13px] leading-[1.2] font-medium">Metered connection</span>
+            <span className={hintClass}>
+              A phone hotspot or a plan that charges for data. Off unless you turn it on. With the
+              switch below, combining leaves this network out while it is metered.
+            </span>
+          </span>
+          <Switch
+            checked={preference?.metered === true}
+            onCheckedChange={(metered) => change({ metered: metered ? true : undefined })}
+            aria-label={`${name} is metered`}
+          />
+        </label>
+        <label className="flex items-start justify-between gap-4">
+          <span className="flex min-w-0 flex-col gap-1">
+            <span className="text-[13px] leading-[1.2] font-medium">
+              Leave out of combining when metered or the data limit is reached
+            </span>
+            <span className={hintClass}>
+              Off unless you turn it on. Combining then drops this network once you mark it metered
+              or this allowance is used up.
+            </span>
+          </span>
+          <Switch
+            checked={preference?.excludeFromMergeWhenLimited === true}
+            onCheckedChange={(on) => change({ excludeFromMergeWhenLimited: on ? true : undefined })}
+            aria-label={`Leave ${name} out of combining when it is metered or its data limit is reached`}
+          />
+        </label>
       </section>
       <div className="flex flex-wrap items-center gap-2 border-t-[0.5px] border-border pt-3">
         <Button
