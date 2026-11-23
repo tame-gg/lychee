@@ -257,7 +257,17 @@ test('closing the last window while merging keeps Lychee and the helper until th
   expect(code).toBe(0)
   expect(Date.now() - started).toBeLessThan(3000)
   expect((await fake.exited).code).toBe(0)
-  lychee.alive = false
+  const saved = JSON.parse(
+    readFileSync(join(lychee.dirs.userData, 'app-settings.json'), 'utf8')
+  ) as { merge: { enabled: boolean } }
+  expect(saved.merge.enabled).toBe(false)
+  const next = await netd.start({ helperVersion: version })
+  await lychee.launch()
+  await settle(500)
+  const restarted = (await lychee.api.mergeState()) as MergeState
+  expect(restarted.settings.enabled).toBe(false)
+  expect(restarted.status).toBe('off')
+  expect(next.connections).toBe(0)
 })
 
 function zipEntries(path: string): Record<string, string> {

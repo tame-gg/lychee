@@ -61,7 +61,7 @@ Tests build the app first; set `LYCHEE_E2E_SKIP_BUILD=1` when `out/` is already 
 
 A release ships seven files: `Lychee` for macOS (Apple silicon and Intel `.dmg`), Windows (one installer for x64 and ARM64) and Linux (`AppImage` and `.deb`, x86_64 and ARM64). The download links on [tame.gg/projects/lychee](https://tame.gg/projects/lychee) point at the latest GitHub Release, and the release notes label each file from its name (`release/downloads.js`), so keep the naming in `electron-builder.yml` intact.
 
-First bump the version and add its entry at the top of `release/changelog.js`, in one PR. The entry becomes the release notes, and a tag without one stops before building. A release that changes `lychee-netd` sets `netd: true` on that entry. The notes then include: "macOS and Windows: updating Lychee asks once for an administrator password (macOS) or UAC approval (Windows) to update the network helper; Linux deb/rpm need nothing extra".
+First bump the version and add its entry at the top of `release/changelog.js`, in one PR. The entry becomes the release notes, and a tag without one stops before building. A release that changes `lychee-netd` sets `netd: true` on that entry. The notes then include: "macOS and the Linux AppImage ask for an administrator password each time merging starts; Linux deb installs need nothing extra."
 
 ```bash
 npm version <version> --no-git-tag-version     # e.g. 0.1.1

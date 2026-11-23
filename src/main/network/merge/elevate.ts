@@ -635,7 +635,7 @@ function watchedHelper(controlPath: string): HelperProcess {
       } catch {
         return
       }
-      if (mtimeMs < started) return
+      if (mtimeMs < started - 2000) return
       const parsed = parseExitReport(text)
       if (parsed) finish(parsed.exit, parsed.stderr)
     }, EXIT_POLL_MS)

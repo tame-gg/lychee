@@ -156,10 +156,10 @@ test('the shipped changelog has an entry for the current version @smoke', () => 
   )
   expect(run.status).toBe(0)
   expect(run.stdout).toMatch(/^- \*\*/m)
-  expect(run.stdout).not.toContain('UAC approval')
+  expect(run.stdout).not.toContain('each time merging starts')
 })
 
-test('a release that changes lychee-netd says the helper update asks once', () => {
+test('a release that changes lychee-netd says when an administrator password is asked', () => {
   const root = test.info().outputPath('release-netd')
   const script = prepareRelease(root, builds('1.2.0'))
   writeFileSync(
@@ -182,8 +182,9 @@ test('a release that changes lychee-netd says the helper update asks once', () =
     encoding: 'utf8'
   })
   expect(notes.status, notes.stderr).toBe(0)
+  expect(notes.stdout).toContain('each time merging starts')
   expect(notes.stdout).toContain(
-    'macOS and Windows: updating Lychee asks once for an administrator password (macOS) or UAC approval (Windows) to update the network helper; Linux deb/rpm need nothing extra'
+    'macOS and the Linux AppImage ask for an administrator password each time merging starts; Linux deb installs need nothing extra.'
   )
   expect(notes.stdout).toContain('Network helper')
 })

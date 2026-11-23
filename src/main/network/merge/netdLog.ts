@@ -46,13 +46,21 @@ export class NetdLog {
     private readonly rotations = NETD_LOG_ROTATIONS
   ) {
     this.file = join(dir, NETD_LOG_NAME)
-    mkdirSync(dir, { recursive: true })
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch (error) {
+      void error
+    }
   }
 
   write(line: string): void {
     const text = `${new Date().toISOString()} ${redactLogLine(line, this.home)}\n`
-    this.rotate(Buffer.byteLength(text))
-    appendFileSync(this.file, text)
+    try {
+      this.rotate(Buffer.byteLength(text))
+      appendFileSync(this.file, text)
+    } catch (error) {
+      void error
+    }
   }
 
   private rotate(incoming: number): void {

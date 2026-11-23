@@ -279,7 +279,15 @@ function trayActions(state: MergeState | null): MenuItemConstructorOptions[] {
     { label: 'Export diagnostics', click: () => void runDiagnosticsExport() },
     { type: 'separator' },
     merging
-      ? { label: 'Stop merging and quit', click: () => app.quit() }
+      ? {
+          label: 'Stop merging and quit',
+          click: () => {
+            void (async () => {
+              await mergeController?.setMerging(false).catch(() => undefined)
+              app.quit()
+            })()
+          }
+        }
       : { label: 'Quit Lychee', click: () => app.quit() }
   )
   return items

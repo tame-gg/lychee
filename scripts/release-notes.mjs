@@ -31,7 +31,7 @@ if (!tag || !/^v\d/.test(tag)) {
 
 const KIND = { new: 'New', faster: 'Faster', improved: 'Improved', fixed: 'Fixed' }
 const NETD_RELEASE_NOTE =
-  'macOS and Windows: updating Lychee asks once for an administrator password (macOS) or UAC approval (Windows) to update the network helper; Linux deb/rpm need nothing extra'
+  'macOS and the Linux AppImage ask for an administrator password each time merging starts; Linux deb installs need nothing extra.'
 const entry = changelog.find((candidate) => candidate.version === tag)
 if (!entry) {
   console.error(`No ${tag} entry in release/changelog.js — add one, then tag again.`)
