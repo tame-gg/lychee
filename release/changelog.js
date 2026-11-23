@@ -15,7 +15,7 @@
         {
           kind: 'new',
           title: 'Combine connections',
-          text: 'The Network page can send traffic from every app over all of your connections at once, on Mac and Linux. Combining is off until you turn it on. On Mac and the Linux AppImage, turning it on the first time asks for an administrator password; Linux deb and rpm installs need nothing extra. The virtual adapter it adds stays hidden.'
+          text: 'The Network page can send traffic from every app over all of your connections at once, on Mac and Linux. Combining is off until you turn it on. On Mac and the Linux AppImage, turning it on asks for an administrator password each time; Linux deb installs need nothing extra. The virtual adapter it adds stays hidden.'
         },
         {
           kind: 'improved',

@@ -100,7 +100,6 @@ function hostTarget() {
   return `${os}-${arch}`
 }
 
-// Wintun is fetched and verified in L-2 (scripts/fetch-wintun.mjs).
 function ensureWintun(outDir, required) {
   const fetch = join(root, 'scripts', 'fetch-wintun.mjs')
   if (existsSync(fetch)) {
@@ -108,7 +107,7 @@ function ensureWintun(outDir, required) {
   }
   const dll = join(outDir, 'wintun.dll')
   if (existsSync(dll)) return
-  const reason = `${dll} is missing; a Windows helper cannot ship without Wintun (scripts/fetch-wintun.mjs has not landed, and no wintun.dll was placed there by hand)`
+  const reason = `${dll} is missing; a Windows helper cannot ship without Wintun. Run node scripts/fetch-wintun.mjs to download it`
   if (!required) {
     console.warn(`build-netd: warning: ${reason}; the win-x64 helper is incomplete`)
     return
