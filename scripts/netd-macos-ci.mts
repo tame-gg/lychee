@@ -17,9 +17,55 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const bundled = join(root, 'build', 'netd', 'mac-arm64', 'lychee-netd')
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version as string
 const handshake = fileURLToPath(new URL('./netd-handshake.mts', import.meta.url))
+const PROBE_USER = 'lycheetest'
+const PROBE_SUDOERS = '/etc/sudoers.d/lychee-netd-probe'
 
 function pass(message: string): void {
   console.log(`PASS  ${message}`)
+}
+
+function proveExactRule(): void {
+  execFileSync('sudo', ['-n', 'dscl', '.', '-create', `/Users/${PROBE_USER}`])
+  for (const [key, value] of [
+    ['UserShell', '/bin/bash'],
+    ['UniqueID', '550'],
+    ['PrimaryGroupID', '20'],
+    ['NFSHomeDirectory', '/var/empty']
+  ] as const) {
+    execFileSync('sudo', ['-n', 'dscl', '.', '-create', `/Users/${PROBE_USER}`, key, value])
+  }
+  const probe = macSudoersContent(PROBE_USER)
+  const dir = mkdtempSync(join(tmpdir(), 'lychee-sudoers-probe-'))
+  const tmp = join(dir, 'lychee-netd-probe')
+  writeFileSync(tmp, probe)
+  sudo(['visudo', '-cf', tmp])
+  sudo(['install', '-o', 'root', '-g', 'wheel', '-m', '0440', tmp, PROBE_SUDOERS])
+  rmSync(dir, { recursive: true, force: true })
+  const allowed = spawnSync(
+    'sudo',
+    ['-n', '-u', PROBE_USER, 'sudo', '-n', '-l', MAC_HELPER, ...MAC_LAUNCH_ARGS],
+    {
+      encoding: 'utf8'
+    }
+  )
+  if (allowed.status !== 0) {
+    throw new Error(`an account with only this rule rejected the exact launch\n${allowed.stderr}`)
+  }
+  const refusedVersion = spawnSync(
+    'sudo',
+    ['-n', '-u', PROBE_USER, 'sudo', '-n', '-l', MAC_HELPER, 'version'],
+    {
+      encoding: 'utf8'
+    }
+  )
+  if (refusedVersion.status === 0) throw new Error('the exact rule accepted version')
+  const refusedPath = spawnSync(
+    'sudo',
+    ['-n', '-u', PROBE_USER, 'sudo', '-n', '-l', MAC_HELPER, 'serve', '--control', '/tmp/x.sock'],
+    { encoding: 'utf8' }
+  )
+  if (refusedPath.status === 0) throw new Error('the exact rule accepted a different control path')
+  pass('a user with only this rule is limited to the exact launch')
 }
 
 function sudo(args: string[], input?: string): string {
@@ -70,8 +116,17 @@ async function main(): Promise<void> {
     }
     for (const pid of pids) spawnSync('sudo', ['-n', 'kill', pid])
     spawnSync('sleep', ['0.5'])
-    spawnSync('sudo', ['-n', 'rm', '-f', MAC_SUDOERS, MAC_HELPER, '/var/run/lychee-netd.lock'])
+    spawnSync('sudo', [
+      '-n',
+      'rm',
+      '-f',
+      MAC_SUDOERS,
+      PROBE_SUDOERS,
+      MAC_HELPER,
+      '/var/run/lychee-netd.lock'
+    ])
     spawnSync('sudo', ['-n', 'rm', '-rf', '/var/run/lychee-netd'])
+    spawnSync('sudo', ['-n', 'dscl', '.', '-delete', `/Users/${PROBE_USER}`])
   }
 
   try {
@@ -103,18 +158,7 @@ async function main(): Promise<void> {
 
     sudo(['-l', MAC_HELPER, ...MAC_LAUNCH_ARGS])
     pass('sudo -n accepts the exact launch')
-    const refusedVersion = spawnSync('sudo', ['-n', '-l', MAC_HELPER, 'version'])
-    if (refusedVersion.status === 0) throw new Error('sudo -n accepted version')
-    const refusedPath = spawnSync('sudo', [
-      '-n',
-      '-l',
-      MAC_HELPER,
-      'serve',
-      '--control',
-      '/tmp/x.sock'
-    ])
-    if (refusedPath.status === 0) throw new Error('sudo -n accepted a different control path')
-    pass('sudo -n refuses a different subcommand and a different control path')
+    proveExactRule()
 
     child = spawn('sudo', ['-n', MAC_HELPER, ...MAC_LAUNCH_ARGS], {
       stdio: ['ignore', 'pipe', 'pipe']

@@ -98,13 +98,12 @@ $cred = New-Object System.Management.Automation.PSCredential ("$env:COMPUTERNAME
 $exe = Join-Path $env:LYCHEE_CI_DIR 'lychee-netd.exe'
 $errFile = Join-Path $env:LYCHEE_CI_DIR 'stderr.txt'
 $codeFile = Join-Path $env:LYCHEE_CI_DIR 'exitcode.txt'
-$runner = Join-Path $env:LYCHEE_CI_DIR 'run-as-user.cmd'
-Set-Content -LiteralPath $runner -Encoding ASCII -Value @(
-  '@echo off',
-  '"' + $exe + '" serve --control \\\\.\\pipe\\lychee-netd-needs-admin > "' + $errFile + '" 2>&1',
-  '(echo %ERRORLEVEL%)> "' + $codeFile + '"'
-)
-$p = Start-Process -FilePath "$env:SystemRoot\\System32\\cmd.exe" -ArgumentList @('/c', $runner) -Credential $cred -WorkingDirectory $env:LYCHEE_CI_DIR -WindowStyle Hidden -PassThru
+$runner = Join-Path $env:LYCHEE_CI_DIR 'run-as-user.ps1'
+$launch = '& ''{0}'' serve --control ''\\\\.\\pipe\\lychee-netd-needs-admin'' 2> ''{1}''' -f $exe, $errFile
+$codeLine = 'Set-Content -LiteralPath ''{0}'' -Value $LASTEXITCODE' -f $codeFile
+Set-Content -LiteralPath $runner -Encoding ASCII -Value @($launch, $codeLine)
+$ps = Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+$p = Start-Process -FilePath $ps -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$runner) -Credential $cred -WorkingDirectory $env:LYCHEE_CI_DIR -WindowStyle Hidden -PassThru
 if (-not $p.WaitForExit(20000)) {
   Stop-Process -Id $p.Id -Force
   throw 'the standard-account helper did not exit'
