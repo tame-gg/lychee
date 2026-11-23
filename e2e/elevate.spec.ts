@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  utimesSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -279,6 +280,29 @@ test('connectOnlyLauncher only names the control path', async () => {
   expect(result.process.pid).toBeNull()
   expect(result.verify).toBeUndefined()
   result.process.kill()
+})
+
+test('a stale exit report from before launch is not an instant crash', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'lychee-netd-exit-'))
+  const sock = join(dir, 'netd.sock')
+  const report = `${sock}.exit`
+  let stop: (() => void) | undefined
+  try {
+    writeFileSync(report, '4\nstale crash\n')
+    const old = new Date(Date.now() - 60 * 60 * 1000)
+    utimesSync(report, old, old)
+    const result = await connectOnlyLauncher(sock).launch()
+    if (result.kind !== 'launched') throw new Error('unreachable')
+    stop = () => result.process.kill()
+    await new Promise((resolve) => setTimeout(resolve, 600))
+    expect(result.process.exit).toBeNull()
+    writeFileSync(report, '6\nneeds_admin: the process token is not elevated\n')
+    await expect.poll(() => result.process.exit?.code ?? null, { timeout: 2000 }).toBe(6)
+    expect(result.process.stderr).toContain('needs_admin')
+  } finally {
+    stop?.()
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 test.describe('macOS administrator prompt', () => {

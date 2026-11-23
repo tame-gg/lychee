@@ -68,6 +68,10 @@ export function NetworkScreen(): React.JSX.Element {
     busy: false,
     error: null
   })
+  const [diagnostics, setDiagnostics] = useState<{ busy: boolean; note: string | null }>({
+    busy: false,
+    note: null
+  })
 
   useEffect(() => {
     document.title = 'Lychee — Network'
@@ -92,6 +96,22 @@ export function NetworkScreen(): React.JSX.Element {
     : ['—', undefined]
   const problem = status.tone === 'attention' || status.tone === 'error'
   const error = repair.error ?? mergeError
+
+  const exportDiagnostics = (): void => {
+    setDiagnostics({ busy: true, note: null })
+    void window.lychee
+      .exportDiagnostics()
+      .then((saved) => setDiagnostics({ busy: false, note: saved ? 'Diagnostics saved' : null }))
+      .catch((error: unknown) =>
+        setDiagnostics({
+          busy: false,
+          note: (error instanceof Error ? error.message : String(error)).replace(
+            /^Error invoking remote method '[^']+': (Error: )?/,
+            ''
+          )
+        })
+      )
+  }
 
   const runRepair = (): void => {
     setRepair({ busy: true, error: null })
@@ -365,15 +385,31 @@ export function NetworkScreen(): React.JSX.Element {
             ? `Network helper ${merging.helper.version} · ${merging.helper.os}/${merging.helper.arch}`
             : 'Network helper not running'}
         </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={(merging.helper !== null && merging.helperState !== 'off') || repair.busy}
-          onClick={runRepair}
-        >
-          {repair.busy ? 'Repairing…' : 'Repair network settings'}
-        </Button>
+        <span className="flex shrink-0 items-center gap-2">
+          {diagnostics.note && (
+            <span className="max-w-[220px] truncate font-mono text-[10.5px] text-muted-foreground">
+              {diagnostics.note}
+            </span>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={diagnostics.busy}
+            onClick={exportDiagnostics}
+          >
+            {diagnostics.busy ? 'Exporting…' : 'Export diagnostics'}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={(merging.helper !== null && merging.helperState !== 'off') || repair.busy}
+            onClick={runRepair}
+          >
+            {repair.busy ? 'Repairing…' : 'Repair network settings'}
+          </Button>
+        </span>
       </ScreenFooter>
     </div>
   )

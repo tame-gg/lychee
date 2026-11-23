@@ -37,7 +37,7 @@ const SKIPPED: MergeSkipped[] = [
 /** What the controller reports for each way turning merging on can end, worded as it words them. */
 const OUTCOME_MESSAGES: Partial<Record<MergeStatus, string>> = {
   error: 'route 0.0.0.0/1: file exists',
-  stopped: 'The network helper stopped unexpectedly',
+  stopped: 'Helper stopped unexpectedly',
   reconnecting: 'Reconnecting to the network helper',
   needs_permission: 'the administrator prompt was declined',
   needs_admin:

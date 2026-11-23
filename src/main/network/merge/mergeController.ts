@@ -69,7 +69,7 @@ export interface MergeControllerOptions {
 }
 
 export const NO_ADAPTERS_MESSAGE = 'No network connection is available to combine'
-export const STOPPED_MESSAGE = 'The network helper stopped unexpectedly'
+export const STOPPED_MESSAGE = 'Helper stopped unexpectedly'
 export const RECONNECTING_MESSAGE = 'Reconnecting to the network helper'
 export const BUSY_MESSAGE = 'Another Lychee is already using the network helper'
 
@@ -192,14 +192,17 @@ export class MergeController {
     if (this.shuttingDown) return
     if (!on) {
       this.exitNodeBlocked = false
+      this.log('merging disabled')
       await this.saveSettings({ ...this.settings, enabled: false })
       await this.disable()
       return
     }
     if (await this.exitNodeActive()) {
+      this.log('merging refused: tailscale exit node')
       await this.blockForExitNode()
       return
     }
+    this.log('merging enabled')
     await this.saveSettings({ ...this.settings, enabled: true })
     await this.enable()
   }
@@ -334,13 +337,24 @@ export class MergeController {
     const client = this.client
     const helper = this.helper
     this.client = null
-    if (client && !client.closed) await client.quit(this.timing.quitTimeoutMs)
+    if (!client || client.closed) {
+      this.log('quit: no session')
+    } else {
+      this.log('quit: sending')
+      const acknowledged = await client.quit(this.timing.quitTimeoutMs)
+      this.log(acknowledged ? 'quit: acknowledged' : 'quit: no acknowledgement')
+    }
     if (helper && !helper.exit) {
       const exit = await Promise.race([
         helper.exited,
         sleep(Math.min(200, this.timing.quitTimeoutMs)).then(() => null)
       ])
-      if (!exit) helper.kill()
+      if (!exit) {
+        this.log('quit: killing helper')
+        helper.kill()
+      } else {
+        this.log(`quit: helper exited ${exit.code ?? 'none'}`)
+      }
     }
   }
 
@@ -435,7 +449,9 @@ export class MergeController {
 
   private watchHelper(helper: HelperProcess): void {
     void helper.exited.then((exit) => {
-      this.log(`helper exited with code ${exit.code}${exit.signal ? ` (${exit.signal})` : ''}`)
+      this.log(
+        `helper exited with code ${exit.code ?? 'none'}${exit.signal ? ` (${exit.signal})` : ''}`
+      )
       if (this.helper !== helper) return
       if (!this.client && !this.gate) this.helper = null
     })
@@ -540,6 +556,7 @@ export class MergeController {
       }
     }
     if (client.closed || this.client !== client) return { kind: 'retry', message: 'closed' }
+    this.log(`session ready (${hello.helper_version})`)
     this.refreshStatus()
     return { kind: 'ok', client, fresh }
   }
@@ -765,7 +782,10 @@ export class MergeController {
       detail = exitStatus(exit, helper.stderr, this.platform).message
     }
     this.helperState = null
-    this.setStatus('stopped', detail ? `${STOPPED_MESSAGE}: ${detail}` : STOPPED_MESSAGE)
+    const stopped = detail ? `${STOPPED_MESSAGE}: ${detail}` : STOPPED_MESSAGE
+    const code = exit && exit.code !== null ? ` (exit ${exit.code})` : ''
+    this.log(`watchdog: ${stopped}${code}`)
+    this.setStatus('stopped', stopped)
     if (helper && !exit) helper.kill()
     if (this.helper === helper) this.helper = null
   }

@@ -41,5 +41,6 @@ export const IpcChannels = {
   setMergeNetwork: 'merge:set-network',
   setMergeWeight: 'merge:set-weight',
   repairNetwork: 'merge:repair',
+  exportDiagnostics: 'merge:export-diagnostics',
   mergeStateChanged: 'merge:state-changed'
 } as const

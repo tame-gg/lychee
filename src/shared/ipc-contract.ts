@@ -74,4 +74,5 @@ export interface IpcContract {
   setMergeNetwork: { args: [id: string, enabled: boolean]; result: void }
   setMergeWeight: { args: [id: string, weight: number | 'auto']; result: void }
   repairNetwork: { args: []; result: void }
+  exportDiagnostics: { args: []; result: string | null }
 }
