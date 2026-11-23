@@ -279,7 +279,8 @@ export function MergeNetworkRow({
         </div>
         {adapter && (
           <div className="font-medium text-muted-foreground">
-            Lychee {formatSpeed(lycheeBytesPerSec)} of {formatSpeed(adapter.link_in_bps)}
+            Lychee {formatSpeed(Math.min(lycheeBytesPerSec, adapter.link_in_bps))} of{' '}
+            {formatSpeed(adapter.link_in_bps)}
           </div>
         )}
       </div>

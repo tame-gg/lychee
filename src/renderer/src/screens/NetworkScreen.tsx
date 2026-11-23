@@ -329,10 +329,10 @@ export function NetworkScreen(): React.JSX.Element {
               switched off.
             </p>
             <p>
-              It stays off until you switch Combine connections on. The first time, and again each
-              time an update replaces the network helper, macOS asks for an administrator password
-              and Windows asks you to approve the change. Linux packages set this up when they are
-              installed. You can say no. Combining stays off, and Lychee’s downloads are unchanged.
+              It stays off until you switch Combine connections on. Combining is for Mac and Linux
+              only. On a Mac and the Linux AppImage, turning it on the first time asks for an
+              administrator password. Linux deb and rpm installs need nothing extra. You can say no.
+              Combining stays off, and Lychee’s downloads are unchanged.
             </p>
             <p>
               Switch Combine connections off to stop. If the network seems stuck afterwards, switch

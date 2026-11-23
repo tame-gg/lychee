@@ -224,8 +224,8 @@ export class MergeController {
   async setNetwork(id: string, enabled: boolean): Promise<void> {
     if (!validAdapterName(id)) throw new Error('Unknown network')
     if (enabled) {
-      this.limitHold.add(id)
       if (this.limited[id] !== undefined) {
+        this.limitHold.add(id)
         const limited = { ...this.limited }
         delete limited[id]
         this.limited = limited

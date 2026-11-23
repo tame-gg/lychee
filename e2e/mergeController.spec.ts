@@ -611,6 +611,29 @@ test('a metered or capped network is left out of merging only when that option i
   expect(h.controller.state().limited).toEqual({})
 })
 
+test('turning a network back on does not keep a later data cap from leaving it out', async ({
+  make
+}) => {
+  const h = make()
+  await h.controller.start()
+  await h.controller.setMerging(true)
+  await h.controller.setNetwork('en0', false)
+  await h.controller.setNetwork('en0', true)
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: false, excludeWhenLimited: true, dataLimit: 100, used: 100 }
+  })
+  await expect.poll(() => h.launcher.fake.view.excluded).toEqual(['en0'])
+  expect(h.controller.state().limited).toEqual({ en0: 'cap' })
+
+  await h.controller.setNetwork('en0', true)
+  expect(h.controller.state().limited).toEqual({})
+  await h.controller.syncLimitedNetworks({
+    en0: { metered: false, excludeWhenLimited: true, dataLimit: 100, used: 100 }
+  })
+  expect(h.controller.state().limited).toEqual({})
+  expect(h.launcher.fake.view.excluded).toEqual([])
+})
+
 test.describe('shutdown', () => {
   test('shutdown tells the helper to quit and waits for it', async ({ make }) => {
     const h = make()

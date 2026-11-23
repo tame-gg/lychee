@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, win32 } from 'node:path'
 import { test } from 'node:test'
-import { win32 } from 'node:path'
 import {
   detectTailscaleExitNode,
   parseTailscaleStatus,
