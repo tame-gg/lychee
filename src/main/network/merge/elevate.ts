@@ -4,7 +4,19 @@ import { isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import type { MergeStatus } from '../../../shared/types'
-import { pipeServerIdentity, systemTool, windowsIdentity } from './windowsPipe'
+import { MAC_CONTROL, MAC_HELPER, macRootOwnedCopyLines, shellQuote } from './macInstall'
+import {
+  endWindowsHelper,
+  installWindowsHelper,
+  readWindowsHelperHash,
+  startWindowsHelper,
+  windowsAccount,
+  windowsHelperDirectory,
+  windowsPipePath,
+  windowsProgramFiles,
+  windowsTaskExit
+} from './windowsInstall'
+import { pipeServerIdentity, windowsIdentity } from './windowsPipe'
 
 const execFileAsync = promisify(execFile)
 
@@ -70,35 +82,17 @@ export interface HelperLocation {
 export const ADMIN_ACCOUNT_MESSAGE =
   'Combining connections system-wide needs an administrator account on this PC'
 export const ANOTHER_TOOL_MESSAGE = 'another connection-merging tool is running'
-export const MAC_HELPER_DIR = '/Library/PrivilegedHelperTools'
-export const MAC_HELPER = `${MAC_HELPER_DIR}/gg.tame.lychee.netd`
-export const MAC_CONTROL = '/var/run/lychee-netd/netd.sock'
+export { MAC_CONTROL, MAC_HELPER, MAC_HELPER_DIR, MAC_SUDOERS } from './macInstall'
 export const MAC_PROMPT = 'Lychee needs an administrator password to combine your connections.'
 export const PERMISSION_MESSAGE = 'permission to start the network helper was not given'
 export const LINUX_SYSTEM_HELPER = '/usr/lib/lychee/lychee-netd'
 export const LINUX_ROOT_CONTROL = '/run/lychee-netd/netd.sock'
 export const PKEXEC_PATHS = ['/usr/bin/pkexec', '/run/wrappers/bin/pkexec']
-export const PIPE_PREFIX = '\\\\.\\pipe\\lychee-netd-'
+export { WINDOWS_PIPE_PREFIX as PIPE_PREFIX } from './windowsInstall'
 
 const EARLY_EXIT_MS = 1000
 const STDERR_KEEP = 8192
 const MESSAGE_MAX = 200
-
-const ELEVATE_SCRIPT = `
-$ErrorActionPreference = 'Stop'
-try {
-  $p = Start-Process -FilePath $env:LYCHEE_NETD_EXE -ArgumentList @('serve', '--control', $env:LYCHEE_NETD_CONTROL) -Verb RunAs -WindowStyle Hidden -PassThru
-} catch {
-  $code = 1
-  if ($_.Exception.InnerException -and $_.Exception.InnerException.NativeErrorCode) { $code = $_.Exception.InnerException.NativeErrorCode }
-  [Console]::Error.WriteLine($_.Exception.Message)
-  exit $code
-}
-[Console]::Out.WriteLine('pid=' + $p.Id)
-[Console]::Out.Flush()
-$p.WaitForExit()
-exit $p.ExitCode
-`
 
 function buildDir(arch: string): string {
   return arch === 'arm64' ? 'arm64' : 'x64'
@@ -173,10 +167,6 @@ export function helperLocation(env: HelperEnvironment): HelperLocation | FailedL
   }
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`
-}
-
 export function appleScriptString(text: string): string {
   return `"${text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
@@ -186,19 +176,8 @@ export function macAdminShellScript(options: {
   install: boolean
   uid: number
 }): string {
-  const temp = `${MAC_HELPER}.tmp`
   const steps = ['set -e']
-  if (options.install) {
-    steps.push(
-      `/bin/mkdir -p ${shellQuote(MAC_HELPER_DIR)}`,
-      `/usr/sbin/chown root:wheel ${shellQuote(MAC_HELPER_DIR)}`,
-      `/bin/chmod 755 ${shellQuote(MAC_HELPER_DIR)}`,
-      `/bin/cp ${shellQuote(options.bundled)} ${shellQuote(temp)}`,
-      `/usr/sbin/chown root:wheel ${shellQuote(temp)}`,
-      `/bin/chmod 755 ${shellQuote(temp)}`,
-      `/bin/mv -f ${shellQuote(temp)} ${shellQuote(MAC_HELPER)}`
-    )
-  }
+  if (options.install) steps.push(...macRootOwnedCopyLines(options.bundled))
   steps.push(
     `exec /usr/bin/env SUDO_UID=${Math.trunc(options.uid)} ${shellQuote(MAC_HELPER)} serve --control ${shellQuote(MAC_CONTROL)}`
   )
@@ -344,6 +323,45 @@ class SpawnedHelper implements HelperProcess {
 
   private append(text: string): void {
     this.stderr = (this.stderr + text).slice(-STDERR_KEEP)
+  }
+}
+
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
+}
+
+class TrackedHelper implements HelperProcess {
+  pid: number | null
+  exit: HelperExit | null = null
+  stderr = ''
+  readonly exited: Promise<HelperExit>
+  private timer: ReturnType<typeof setInterval> | null = null
+  private readonly stop: () => void
+
+  constructor(pid: number, stop: () => void) {
+    this.pid = pid
+    this.stop = stop
+    this.exited = new Promise((resolve) => {
+      const finish = (exit: HelperExit): void => {
+        if (this.exit) return
+        this.exit = exit
+        if (this.timer) clearInterval(this.timer)
+        resolve(exit)
+      }
+      this.timer = setInterval(() => {
+        if (!processAlive(pid)) finish({ code: null, signal: null })
+      }, 500)
+      this.timer.unref()
+    })
+  }
+
+  kill(): void {
+    this.stop()
   }
 }
 
@@ -544,36 +562,52 @@ export class NativeLauncher implements Launcher {
       return failed('unavailable', `cannot read the Windows user identity: ${String(error)}`)
     }
     if (!identity.administrator) return failed('needs_admin', ADMIN_ACCOUNT_MESSAGE)
-    const path = PIPE_PREFIX + identity.sid
-    const encoded = Buffer.from(ELEVATE_SCRIPT, 'utf16le').toString('base64')
-    const helper = spawnHelper(
-      systemTool(this.env.env, 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
-      [
-        '-NoLogo',
-        '-NoProfile',
-        '-NonInteractive',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-EncodedCommand',
-        encoded
-      ],
-      { ...this.env.env, LYCHEE_NETD_EXE: binary, LYCHEE_NETD_CONTROL: path },
-      this.log,
-      { pidFromStdout: true }
-    )
-    const early = await helper.exitWithin(EARLY_EXIT_MS)
-    if (early) {
-      const { status, message } = exitStatus(early, helper.stderr, 'win32')
-      return failed(status, message)
+    const expectedHash = readWindowsHelperHash(binary)
+    if (!expectedHash) {
+      return failed('unavailable', 'this build does not record a hash for the network helper')
     }
-    const expected = identity.sid
+    let user: string
+    try {
+      user = windowsAccount(this.env.env)
+    } catch (error) {
+      return failed('unavailable', error instanceof Error ? error.message : String(error))
+    }
+    const programFiles = windowsProgramFiles(this.env.env)
+    const path = windowsPipePath(identity.sid)
+    const exe = join(windowsHelperDirectory(programFiles), 'lychee-netd.exe')
+    try {
+      installWindowsHelper({
+        sourceExe: binary,
+        expectedSha256: expectedHash,
+        programFiles,
+        user,
+        sid: identity.sid,
+        env: this.env.env
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (/1223|cancel/i.test(message)) return failed('needs_permission', PERMISSION_MESSAGE)
+      return failed('unavailable', message)
+    }
+    let pid: number
+    try {
+      pid = startWindowsHelper(this.env.env, exe)
+    } catch (error) {
+      const code = windowsTaskExit(this.env.env)
+      if (code !== null && code !== 0 && code !== 0x41301) {
+        const { status, message } = exitStatus({ code, signal: null }, '', 'win32')
+        return failed(status, message)
+      }
+      return failed('unavailable', error instanceof Error ? error.message : String(error))
+    }
+    const expectedSid = identity.sid
     return {
       kind: 'launched',
-      process: helper,
+      process: new TrackedHelper(pid, () => endWindowsHelper(this.env.env, exe)),
       path,
       verify: async () => {
         const server = await pipeServerIdentity(path)
-        if (server.sid !== expected) {
+        if (server.sid !== expectedSid) {
           throw new Error(`${path} belongs to another process (pid ${server.pid})`)
         }
       }

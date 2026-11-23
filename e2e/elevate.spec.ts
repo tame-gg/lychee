@@ -28,6 +28,13 @@ import {
   pkexecPath,
   type HelperEnvironment
 } from '../src/main/network/merge/elevate'
+import { MAC_SUDOERS, macSudoersContent } from '../src/main/network/merge/macInstall'
+import {
+  windowsAclProblem,
+  windowsHelperDirectory,
+  windowsPipeDaclProblem,
+  windowsTaskXml
+} from '../src/main/network/merge/windowsInstall'
 
 function environment(overrides: Partial<HelperEnvironment>): HelperEnvironment {
   return {
@@ -340,5 +347,58 @@ test.describe('macOS administrator prompt', () => {
       exit: one,
       stderr: 'something else entirely'
     })
+  })
+
+  test('the sudoers file is the two exact lines, with no wildcard', () => {
+    const user = 'runner'
+    expect(macSudoersContent(user)).toBe(
+      [
+        '# Written by Lychee: runner may start the network helper without a password.',
+        'runner ALL=(root) NOPASSWD: /Library/PrivilegedHelperTools/gg.tame.lychee.netd serve --control /var/run/lychee-netd/netd.sock',
+        ''
+      ].join('\n')
+    )
+    expect(macSudoersContent(user)).not.toMatch(/\*|SETENV|""/)
+    expect(MAC_SUDOERS).toBe('/etc/sudoers.d/lychee-netd')
+    for (const name of ['', 'not a user', 'root;id', 'a*b', 'user name']) {
+      expect(() => macSudoersContent(name)).toThrow(/simple account name/)
+    }
+  })
+})
+
+test.describe('Windows helper install', () => {
+  test('the helper is copied under Program Files and the task points only there', () => {
+    expect(windowsHelperDirectory('C:\\Program Files')).toBe('C:\\Program Files\\Lychee\\helper')
+    const exe = 'C:\\Program Files\\Lychee\\helper\\lychee-netd.exe'
+    const control = '\\\\.\\pipe\\lychee-netd-S-1-5-21-1'
+    const xml = windowsTaskXml('RUNNER\\admin', exe, control)
+    expect(xml).toContain('<RunLevel>HighestAvailable</RunLevel>')
+    expect(xml).toContain(`<Command>${exe}</Command>`)
+    expect(xml).toContain(`<Arguments>serve --control ${control}</Arguments>`)
+    expect(xml).not.toMatch(/LOCALAPPDATA|Users\\/i)
+    expect(windowsTaskXml('a&b', 'c<d', 'e"f')).toContain('<UserId>a&amp;b</UserId>')
+    expect(windowsTaskXml('a&b', 'c<d', 'e"f')).toContain('<Command>c&lt;d</Command>')
+  })
+
+  test('only SYSTEM and Administrators may write, and the pipe DACL names the user and SYSTEM', () => {
+    const readOnly = 1 | 8 | 32 | 128 | 131072 | 1048576
+    expect(
+      windowsAclProblem('S-1-5-32-544', [
+        { sid: 'S-1-5-18', type: 'Allow', rights: 0x1ff },
+        { sid: 'S-1-5-32-544', type: 'Allow', rights: 0x1ff },
+        { sid: 'S-1-5-32-545', type: 'Allow', rights: readOnly }
+      ])
+    ).toBeNull()
+    expect(
+      windowsAclProblem('S-1-5-32-544', [{ sid: 'S-1-5-32-545', type: 'Allow', rights: 2 }])
+    ).toBe('S-1-5-32-545 can write')
+    expect(windowsAclProblem('S-1-5-32-545', [])).toMatch(/owner/)
+    const sid = 'S-1-5-21-1'
+    expect(windowsPipeDaclProblem(`O:${sid}D:P(A;;GRGW;;;${sid})(A;;GA;;;SY)`, sid)).toBeNull()
+    expect(windowsPipeDaclProblem(`O:${sid}G:BAD:P(A;;GRGW;;;${sid})(A;;GA;;;SY)`, sid)).toBeNull()
+    expect(windowsPipeDaclProblem(`O:${sid}D:P(A;;GA;;;BA)(A;;GA;;;SY)`, sid)).toMatch(/ACE for BA/)
+    expect(windowsPipeDaclProblem(`O:${sid}D:(A;;GRGW;;;${sid})(A;;GA;;;SY)`, sid)).toMatch(
+      /not protected/
+    )
   })
 })
