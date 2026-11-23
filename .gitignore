@@ -8,3 +8,5 @@ test-results
 playwright-report
 *.tsbuildinfo
 build/netd/
+wintun.dll
+wintun-*.zip

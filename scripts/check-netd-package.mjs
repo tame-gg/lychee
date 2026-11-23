@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   closeSync,
   existsSync,
@@ -11,6 +12,7 @@ import {
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Arch } from 'electron-builder'
+import { WINTUN_DLL_SHA256 } from './fetch-wintun.mjs'
 import { netdBinaryName, netdTarget } from './netd-target.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -44,11 +46,23 @@ export default async function checkNetdPackage(context) {
   checkHeader(binary, platform, arch)
   checkGoBuild(binary, platform, arch)
   checkVersion(binary, platform, arch)
-  if (target === 'win-x64') {
-    for (const file of ['wintun.dll', 'wintun-LICENSE.txt']) {
-      if (!entries.includes(file))
-        console.warn(`warning: ${helperDir} lacks ${file} (fetch-wintun.mjs has not landed yet)`)
-    }
+  if (target === 'win-x64') checkWintun(helperDir)
+}
+
+function checkWintun(helperDir) {
+  const dll = join(helperDir, 'wintun.dll')
+  const license = join(helperDir, 'wintun-LICENSE.txt')
+  if (!existsSync(dll)) throw new Error(`${dll} is missing`)
+  if (!existsSync(license)) throw new Error(`${license} is missing`)
+  const digest = createHash('sha256').update(readFileSync(dll)).digest('hex')
+  if (digest !== WINTUN_DLL_SHA256.amd64) {
+    throw new Error(
+      `${dll} SHA-256 ${digest} does not match the pinned Wintun amd64 hash ${WINTUN_DLL_SHA256.amd64}`
+    )
+  }
+  const reference = join(root, 'build', 'licenses', 'wintun-LICENSE.txt')
+  if (!readFileSync(license).equals(readFileSync(reference))) {
+    throw new Error(`${license} does not match ${reference}`)
   }
 }
 
