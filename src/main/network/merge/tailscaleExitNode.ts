@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { win32 } from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
@@ -38,13 +40,55 @@ export function parseTailscaleStatus(text: string): ExitNodeDetection {
   return { detected: true, active: false }
 }
 
-export async function readTailscaleStatusCli(): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync('tailscale', ['status', '--json'], {
-      timeout: STATUS_TIMEOUT_MS,
-      windowsHide: true,
-      maxBuffer: 16 * 1024 * 1024
+export function tailscaleBinaryCandidates(
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv
+): string[] {
+  if (platform === 'darwin') {
+    return [
+      '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
+      '/opt/homebrew/bin/tailscale',
+      '/usr/local/bin/tailscale'
+    ]
+  }
+  if (platform === 'win32') {
+    return ['ProgramFiles', 'ProgramFiles(x86)'].flatMap((name) => {
+      const root = env[name]
+      return root ? [win32.join(root, 'Tailscale', 'tailscale.exe')] : []
     })
+  }
+  if (platform === 'linux') {
+    return ['/usr/bin/tailscale', '/usr/sbin/tailscale', '/usr/local/bin/tailscale']
+  }
+  return []
+}
+
+export function resolveTailscaleBinary(
+  platform: NodeJS.Platform,
+  env: NodeJS.ProcessEnv,
+  exists: (path: string) => boolean
+): string {
+  for (const candidate of tailscaleBinaryCandidates(platform, env)) {
+    if (exists(candidate)) return candidate
+  }
+  return 'tailscale'
+}
+
+export async function readTailscaleStatusCli(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (path: string) => boolean = existsSync
+): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync(
+      resolveTailscaleBinary(platform, env, exists),
+      ['status', '--json'],
+      {
+        timeout: STATUS_TIMEOUT_MS,
+        windowsHide: true,
+        maxBuffer: 16 * 1024 * 1024
+      }
+    )
     return stdout
   } catch (error) {
     const stdout = stdoutOf(error)
