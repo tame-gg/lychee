@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process'
-import { accessSync, constants, existsSync } from 'node:fs'
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
@@ -581,18 +581,76 @@ export class NativeLauncher implements Launcher {
   }
 }
 
+function exitReportPath(controlPath: string): string | null {
+  if (controlPath.startsWith('\\\\')) return null
+  return `${controlPath}.exit`
+}
+
+export function parseExitReport(text: string): { exit: HelperExit; stderr: string } | null {
+  if (!text.endsWith('\n')) return null
+  const [first, ...rest] = text.slice(0, -1).split('\n')
+  const trimmed = first.trim()
+  if (trimmed === '' || trimmed === 'null') {
+    return { exit: { code: null, signal: null }, stderr: rest.join('\n') }
+  }
+  const code = Number(trimmed)
+  if (!Number.isInteger(code)) return null
+  return { exit: { code, signal: null }, stderr: rest.join('\n') }
+}
+
+function watchedHelper(controlPath: string): HelperProcess {
+  const report = exitReportPath(controlPath)
+  let exit: HelperExit | null = null
+  let stderr = ''
+  let settled = false
+  let timer: NodeJS.Timeout | null = null
+  let resolveExit: (value: HelperExit) => void = () => {}
+  const exited = new Promise<HelperExit>((resolve) => {
+    resolveExit = resolve
+  })
+  const finish = (next: HelperExit, errText: string): void => {
+    if (settled) return
+    settled = true
+    exit = next
+    stderr = errText
+    if (timer) clearInterval(timer)
+    timer = null
+    resolveExit(next)
+  }
+  if (report) {
+    timer = setInterval(() => {
+      let text: string
+      try {
+        text = readFileSync(report, 'utf8')
+      } catch {
+        return
+      }
+      const parsed = parseExitReport(text)
+      if (parsed) finish(parsed.exit, parsed.stderr)
+    }, 50)
+    timer.unref()
+  }
+  return {
+    pid: null,
+    get exit() {
+      return exit
+    },
+    exited,
+    get stderr() {
+      return stderr
+    },
+    kill() {
+      finish({ code: null, signal: 'SIGTERM' }, stderr)
+    }
+  }
+}
+
 export function connectOnlyLauncher(path: string): Launcher {
   return {
     launch: async () => ({
       kind: 'launched',
       path,
-      process: {
-        pid: null,
-        exit: null,
-        exited: new Promise<HelperExit>(() => {}),
-        stderr: '',
-        kill: () => {}
-      }
+      process: watchedHelper(path)
     })
   }
 }

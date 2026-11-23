@@ -1,4 +1,7 @@
-import { stat, statfs } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
+import { mkdir, stat, statfs, writeFile } from 'node:fs/promises'
+import { release } from 'node:os'
+import { dirname, join } from 'node:path'
 import {
   app,
   clipboard,
@@ -17,6 +20,7 @@ import {
   DEFAULT_SLOW_MODE_SPEED,
   DOWNLOADS_AT_ONCE,
   type InitialState,
+  type MergeState,
   type ThemeSource
 } from '../../shared/types'
 import { DownloadManager } from '../download/downloadManager'
@@ -24,8 +28,17 @@ import { getDefaultDownloadsDir, getHomeDir } from '../download/paths'
 import { listHistory } from '../download/history'
 import { probeUrl } from '../download/probe'
 import { deviceBindingSupported } from '../network/deviceBinding'
+import { setDiagnosticsExporter } from '../diagnosticsAction'
+import { buildDiagnosticsZip } from '../network/merge/diagnostics'
 import { connectOnlyLauncher, NativeLauncher } from '../network/merge/elevate'
 import { MergeController } from '../network/merge/mergeController'
+import {
+  NETD_LOG_NAME,
+  NETD_LOG_ROTATIONS,
+  NetdLog,
+  netdLogsDirectory,
+  redactLogLine
+} from '../network/merge/netdLog'
 import { pendingLink, pendingLinks, releaseLink } from '../openLinks'
 import { NetworkMonitor, setReportedTunName } from '../network/interfaces'
 import { loadSettings, saveSettings } from '../settings'
@@ -81,7 +94,10 @@ export interface RegisteredHandlers {
   merge: MergeController
 }
 
-export function registerIpcHandlers(getWindow: () => BrowserWindow | null): RegisteredHandlers {
+export function registerIpcHandlers(
+  getWindow: () => BrowserWindow | null,
+  onMergeState?: (state: MergeState) => void
+): RegisteredHandlers {
   // The main process keeps the network list, for downloads and the window alike.
   const networks = new NetworkMonitor((list) => {
     manager.networksChanged()
@@ -90,6 +106,13 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
   })
   const manager = new DownloadManager(getWindow, networks)
   let reportedTunName: string | null = null
+  const logsDirectory = netdLogsDirectory(app.getPath('userData'))
+  const home = app.getPath('home')
+  const netdLog = new NetdLog(logsDirectory, home)
+  const logNetd = (line: string): void => {
+    netdLog.write(line)
+    console.log(`[lychee-netd] ${redactLogLine(line, home)}`)
+  }
   const merge = new MergeController({
     launcher: testKnobs.netdControlPath
       ? connectOnlyLauncher(testKnobs.netdControlPath)
@@ -104,7 +127,7 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
             env: process.env,
             uid: process.getuid?.()
           },
-          (line) => console.log(`[lychee-netd] ${line}`)
+          logNetd
         ),
     version: app.getVersion(),
     timing: testKnobs.netdControlPath ? undefined : { connectTimeoutMs: HELPER_PROMPT_MS },
@@ -119,11 +142,12 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
         setReportedTunName(tunName)
         void networks.refresh()
       }
+      onMergeState?.(state)
       const window = getWindow()
       if (window && !window.isDestroyed())
         window.webContents.send(IpcChannels.mergeStateChanged, state)
     },
-    log: (line) => console.log(`[lychee-netd] ${line}`)
+    log: logNetd
   })
   void merge
     .start()
@@ -323,5 +347,49 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): Regi
   handle('setMergeWeight', (_event, id, weight) => pushOnFailure(merge.setWeight(id, weight)))
   handle('repairNetwork', () => merge.repair())
 
+  const exportDiagnostics = async (): Promise<string | null> => {
+    const target = await diagnosticsTarget(getWindow())
+    if (!target) return null
+    const logs = readNetdLogs(logsDirectory)
+    const bytes = buildDiagnosticsZip({
+      lycheeVersion: app.getVersion(),
+      home,
+      os: { platform: process.platform, release: release(), arch: process.arch },
+      state: merge.state(),
+      logs
+    })
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, bytes)
+    return target
+  }
+  setDiagnosticsExporter(exportDiagnostics)
+  handle('exportDiagnostics', () => exportDiagnostics())
+
   return { manager, merge }
+}
+
+function readNetdLogs(dir: string): { name: string; text: string }[] {
+  const names = [NETD_LOG_NAME]
+  for (let index = 1; index <= NETD_LOG_ROTATIONS; index++) names.push(`${NETD_LOG_NAME}.${index}`)
+  const logs: { name: string; text: string }[] = []
+  for (const name of names) {
+    const path = join(dir, name)
+    if (!existsSync(path)) continue
+    logs.push({ name, text: readFileSync(path, 'utf8') })
+  }
+  return logs
+}
+
+async function diagnosticsTarget(window: BrowserWindow | null): Promise<string | null> {
+  if (testKnobs.diagnosticsPath) return testKnobs.diagnosticsPath
+  const options: Electron.SaveDialogOptions = {
+    title: 'Export diagnostics',
+    defaultPath: 'lychee-diagnostics.zip',
+    filters: [{ name: 'Zip archive', extensions: ['zip'] }]
+  }
+  const result = window
+    ? await dialog.showSaveDialog(window, options)
+    : await dialog.showSaveDialog(options)
+  if (result.canceled || !result.filePath) return null
+  return result.filePath
 }

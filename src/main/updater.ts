@@ -12,6 +12,7 @@ import { resolve } from 'node:path'
 import { autoUpdater } from 'electron-updater'
 import { IpcChannels } from '../shared/ipc-channels'
 import type { UpdateState } from '../shared/types'
+import { runDiagnosticsExport } from './diagnosticsAction'
 import { saveSettings } from './settings'
 
 const CHECK_EVERY_MS = 6 * 60 * 60_000
@@ -176,6 +177,7 @@ function setAppMenu(): void {
           { role: 'hideOthers' },
           { role: 'unhide' },
           { type: 'separator' },
+          { label: 'Export diagnostics', click: () => void runDiagnosticsExport() },
           { role: 'quit' }
         ]
       },

@@ -1,12 +1,25 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, Menu, nativeImage, nativeTheme, screen, shell, Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  MenuItem,
+  nativeImage,
+  nativeTheme,
+  screen,
+  shell,
+  Tray,
+  type MenuItemConstructorOptions
+} from 'electron'
 import { join } from 'path'
 import icon from '../../resources/icon-dark.png?asset'
 // 16px tray icons; nativeImage loads the @2x file next to each on its own.
 import trayIcon from '../../resources/tray.png?asset'
 import trayTemplateIcon from '../../resources/trayTemplate.png?asset'
+import { runDiagnosticsExport } from './diagnosticsAction'
 import { registerIpcHandlers } from './ipc/handlers'
 import { keepsRunningForBrowser, startBridge } from './browserBridge'
+import { mergeKeepsAlive, mergeTrayLabel } from './network/merge/mergeLife'
 import { acceptedLink, bringForward, linkFromArgs, offerLink } from './openLinks'
 import { loadSettings, loadThemeSource, migrateLegacyNetworkPreferences } from './settings'
 import { startUpdater } from './updater'
@@ -15,6 +28,7 @@ import { windowSize } from './windowSize'
 import { setInterfaceSize, trackZoom, zoomOn } from './windowZoom'
 import type { DownloadManager } from './download/downloadManager'
 import type { MergeController } from './network/merge/mergeController'
+import type { MergeState } from '../shared/types'
 
 // In dev mode the app runs as the raw `electron` binary, which otherwise shows "Electron" in
 // the Dock tooltip/menu bar — must be set before the app is ready. Packaged builds already get
@@ -32,7 +46,11 @@ let mainWindow: BrowserWindow | null = null
 let downloadManager: DownloadManager | null = null
 let mergeController: MergeController | null = null
 let quitAfterSuspending = false
+let quitStarted = false
 let tray: Tray | null = null
+let trayWanted = false
+let traySignature = ''
+const QUIT_BUDGET_MS = 3000
 /** The window's content zoom (see windowZoom.ts), which the title bar's controls follow. */
 let zoom = 1
 
@@ -184,7 +202,12 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const registered = registerIpcHandlers(() => mainWindow)
+  const registered = registerIpcHandlers(
+    () => mainWindow,
+    (state) => {
+      if (trayWanted) showTray(state)
+    }
+  )
   downloadManager = registered.manager
   mergeController = registered.merge
   void startBridge({
@@ -201,6 +224,7 @@ app.whenReady().then(async () => {
   })
 
   createWindow()
+  if (process.platform !== 'darwin') attachExportMenu()
   if (testKnobs.hideWindow) app.dock?.hide()
   startUpdater(
     () => mainWindow,
@@ -217,16 +241,19 @@ app.whenReady().then(async () => {
 })
 
 app.on('before-quit', (event) => {
-  if (quitAfterSuspending || !downloadManager) return
-
+  if (quitAfterSuspending) return
   event.preventDefault()
+  if (quitStarted) return
+  quitStarted = true
 
-  // Guarantee the process exits even if suspending hangs
   const forceQuitTimeout = setTimeout(() => {
     app.exit(0)
-  }, 3000)
+  }, QUIT_BUDGET_MS)
 
-  void Promise.allSettled([downloadManager.suspendAll(), mergeController?.shutdown()]).then(() => {
+  void Promise.allSettled([
+    mergeController?.shutdown() ?? Promise.resolve(),
+    downloadManager?.suspendAll() ?? Promise.resolve()
+  ]).then(() => {
     clearTimeout(forceQuitTimeout)
     quitAfterSuspending = true
     app.exit(0)
@@ -241,19 +268,85 @@ function trayImage(): Electron.NativeImage {
   return image
 }
 
-app.on('window-all-closed', () => {
-  if (process.platform === 'darwin') return
-  if (!keepsRunningForBrowser()) return app.quit()
-  // Kept running in the tray, so the browser extension can still reach it.
-  if (tray) return
-  tray = new Tray(trayImage())
-  tray.setToolTip('Lychee')
-  tray.on('click', () => bringForward(ensureWindow()))
-  tray.setContextMenu(
+function trayActions(state: MergeState | null): MenuItemConstructorOptions[] {
+  const merging = state ? mergeKeepsAlive(state) : false
+  const items: MenuItemConstructorOptions[] = [
+    { label: 'Open Lychee', click: () => bringForward(ensureWindow()) }
+  ]
+  if (state && state.status !== 'off') items.push({ label: mergeTrayLabel(state), enabled: false })
+  items.push(
+    { type: 'separator' },
+    { label: 'Export diagnostics', click: () => void runDiagnosticsExport() },
+    { type: 'separator' },
+    merging
+      ? { label: 'Stop merging and quit', click: () => app.quit() }
+      : { label: 'Quit Lychee', click: () => app.quit() }
+  )
+  return items
+}
+
+function showTray(state: MergeState | null): void {
+  const items = trayActions(state)
+  const signature = items.map((item) => item.label ?? item.type ?? '').join('|')
+  publishTray(items)
+  if (tray && signature === traySignature) return
+  traySignature = signature
+  try {
+    if (!tray) {
+      tray = new Tray(trayImage())
+      tray.on('click', () => bringForward(ensureWindow()))
+    }
+    const merging = state ? mergeKeepsAlive(state) : false
+    tray.setToolTip(merging && state ? `Lychee: ${mergeTrayLabel(state)}` : 'Lychee')
+    tray.setContextMenu(Menu.buildFromTemplate(items))
+  } catch (error) {
+    console.error('[lychee] tray unavailable', error)
+  }
+}
+
+function publishTray(items: MenuItemConstructorOptions[]): void {
+  if (app.isPackaged) return
+  const labels = items.flatMap((item) => (typeof item.label === 'string' ? [item.label] : []))
+  const hook = {
+    labels,
+    click: (label: string): void => {
+      const item = items.find((entry) => entry.label === label)
+      item?.click?.({} as Electron.MenuItem, undefined, {} as Electron.KeyboardEvent)
+    }
+  }
+  ;(app as unknown as { __lycheeTray?: typeof hook }).__lycheeTray = hook
+}
+
+function attachExportMenu(): void {
+  const template: MenuItemConstructorOptions = {
+    label: 'Export diagnostics',
+    click: () => void runDiagnosticsExport()
+  }
+  const menu = Menu.getApplicationMenu()
+  const file = menu?.items.find((entry) => entry.role === 'fileMenu' || entry.label === 'File')
+  if (file?.submenu) {
+    file.submenu.append(new MenuItem(template))
+    return
+  }
+  Menu.setApplicationMenu(
     Menu.buildFromTemplate([
-      { label: 'Open Lychee', click: () => bringForward(ensureWindow()) },
-      { type: 'separator' },
-      { label: 'Quit Lychee', click: () => app.quit() }
+      { label: 'File', submenu: [template, { role: 'quit' }] },
+      { role: 'editMenu' },
+      { role: 'viewMenu' },
+      { role: 'windowMenu' }
     ])
   )
+}
+
+app.on('window-all-closed', () => {
+  const state = mergeController?.state() ?? null
+  if (state && mergeKeepsAlive(state)) {
+    trayWanted = true
+    showTray(state)
+    return
+  }
+  if (process.platform === 'darwin') return
+  if (!keepsRunningForBrowser()) return app.quit()
+  trayWanted = true
+  showTray(state)
 })

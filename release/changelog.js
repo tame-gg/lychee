@@ -4,6 +4,7 @@
  * entry in the same PR as the version bump, newest first.
  *
  * `kind` is one of new, faster, improved or fixed; `text` may wrap `code` in backticks.
+ * `netd: true` on an entry (a release that changes lychee-netd) adds the helper-update line.
  */
 ;(function (root) {
   'use strict'
