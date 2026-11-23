@@ -196,7 +196,7 @@ export const DownloadingScreen = memo(function DownloadingScreen({
           <div className="flex min-w-[130px] shrink-0 flex-col gap-[7px]">
             <>
               <BigStat
-                label={`TOTAL SPEED${speedCap}`}
+                label={`LYCHEE${speedCap}`}
                 value={isPaused ? '—' : speedValue}
                 unit={isPaused ? undefined : speedUnit}
                 valueClass={isPaused ? 'text-muted-foreground' : 'text-foreground'}

@@ -10,6 +10,26 @@
 
   root.LycheeChangelog = [
     {
+      version: 'v0.1.3',
+      items: [
+        {
+          kind: 'new',
+          title: 'Combine connections',
+          text: 'The Network page can send traffic from every app over all of your connections at once, on Mac and Linux. Combining is off until you turn it on. On Mac and the Linux AppImage, turning it on the first time asks for an administrator password; Linux deb and rpm installs need nothing extra. The virtual adapter it adds stays hidden.'
+        },
+        {
+          kind: 'improved',
+          title: 'Linux network helper',
+          text: 'On Linux, only the account that installed Lychee can use the network helper.'
+        },
+        {
+          kind: 'fixed',
+          title: 'Missing update feed',
+          text: 'Check for Updates now says "No updates available yet" when the update feed is missing.'
+        }
+      ]
+    },
+    {
       version: 'v0.1.2',
       items: [
         {

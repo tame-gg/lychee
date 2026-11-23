@@ -48,6 +48,8 @@ function sanitizeNetworkPreferences(parsed: unknown): NetworkPreferences {
     ) {
       preference.dataLimitPeriod = value.dataLimitPeriod
     }
+    if (value.metered === true) preference.metered = true
+    if (value.excludeFromMergeWhenLimited === true) preference.excludeFromMergeWhenLimited = true
     for (const key of Object.keys(preference) as (keyof NetworkPreference)[]) {
       if (preference[key] === undefined) delete preference[key]
     }

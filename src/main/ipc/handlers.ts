@@ -149,6 +149,9 @@ export function registerIpcHandlers(
     },
     log: logNetd
   })
+  manager.setLimitsListener(() => {
+    void merge.syncLimitedNetworks(manager.limitFacts())
+  })
   void merge
     .start()
     .catch((error) => console.error('[lychee] network helper failed to start', error))

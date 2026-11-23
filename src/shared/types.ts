@@ -306,6 +306,8 @@ export interface NetworkPreference {
   dataLimit?: number
   /** Defaults to month for existing settings. Weeks start Monday in local time. */
   dataLimitPeriod?: DataLimitPeriod
+  metered?: boolean
+  excludeFromMergeWhenLimited?: boolean
 }
 
 export type NetworkPreferences = Record<string, NetworkPreference>
@@ -462,6 +464,8 @@ export type StartDownloadRequest = StartHttpDownloadRequest | StartTorrentDownlo
 
 export type MergeIpv6Mode = 'auto' | 'on' | 'off'
 
+export type LimitExcludeReason = 'metered' | 'cap'
+
 export interface MergeSettings {
   enabled: boolean
   ipv6: MergeIpv6Mode
@@ -489,6 +493,7 @@ export type MergeStatus =
   | 'out_of_date'
   | 'unsupported'
   | 'another_tool'
+  | 'exit_node'
   | 'unavailable'
 
 export type MergeLinkState = 'none' | 'checking' | 'up' | 'down'
@@ -587,4 +592,5 @@ export interface MergeState {
   skipped: MergeSkipped[]
   discoverySeq: number
   history: MergeHistory
+  limited: Record<string, LimitExcludeReason>
 }

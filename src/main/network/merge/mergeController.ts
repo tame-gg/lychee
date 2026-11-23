@@ -1,4 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
+import { limitExcludeReason, type NetworkLimitFact } from '../../../shared/mergeLimits'
+import { TAILSCALE_EXIT_NODE_MESSAGE } from '../../../shared/mergeMessages'
 import {
   DEFAULT_MERGE_SETTINGS,
   validAdapterName,
@@ -6,12 +8,14 @@ import {
 } from '../../../shared/mergeSettings'
 import {
   MERGE_HISTORY_SECONDS,
+  type LimitExcludeReason,
   type MergeOptionsPatch,
   type MergeSettings,
   type MergeSkipped,
   type MergeState,
   type MergeStatus
 } from '../../../shared/types'
+import { detectTailscaleExitNode } from './tailscaleExitNode'
 import { ADMIN_ACCOUNT_MESSAGE, exitStatus, type HelperProcess, type Launcher } from './elevate'
 import { ConnectionClosedError, NetdClient, NetdError, type SocketFactory } from './netdClient'
 import {
@@ -61,6 +65,7 @@ export interface MergeControllerOptions {
   connect?: SocketFactory
   platform?: NodeJS.Platform
   timing?: Partial<MergeTiming>
+  readTailscaleStatus?: () => Promise<string | null>
 }
 
 export const NO_ADAPTERS_MESSAGE = 'No network connection is available to combine'
@@ -111,6 +116,9 @@ export class MergeController {
   private sessionReady = false
   private shuttingDown = false
   private readonly reapplying = new Set<string>()
+  private limited: Record<string, LimitExcludeReason> = {}
+  private readonly limitHold = new Set<string>()
+  private exitNodeBlocked = false
 
   constructor(options: MergeControllerOptions) {
     this.options = options
@@ -124,6 +132,10 @@ export class MergeController {
       this.settings = await this.options.settings.load()
     } catch (error) {
       this.log(`cannot load the merge settings: ${describe(error)}`)
+    }
+    if (this.settings.enabled && (await this.exitNodeActive())) {
+      await this.blockForExitNode()
+      return
     }
     this.pushSoon(true)
     if (this.settings.enabled) await this.enable()
@@ -162,6 +174,7 @@ export class MergeController {
       adapters: snapshot?.adapters ?? [],
       skipped: this.skipped,
       discoverySeq: snapshot?.discovery_seq ?? 0,
+      limited: { ...this.limited },
       history: {
         down: Object.fromEntries(
           [...this.history.down].map(([name, series]) => [name, [...series]])
@@ -177,10 +190,21 @@ export class MergeController {
 
   async setMerging(on: boolean): Promise<void> {
     if (this.shuttingDown) return
-    this.log(on ? 'merging enabled' : 'merging disabled')
-    await this.saveSettings({ ...this.settings, enabled: on })
-    if (on) await this.enable()
-    else await this.disable()
+    if (!on) {
+      this.exitNodeBlocked = false
+      this.log('merging disabled')
+      await this.saveSettings({ ...this.settings, enabled: false })
+      await this.disable()
+      return
+    }
+    if (await this.exitNodeActive()) {
+      this.log('merging refused: tailscale exit node')
+      await this.blockForExitNode()
+      return
+    }
+    this.log('merging enabled')
+    await this.saveSettings({ ...this.settings, enabled: true })
+    await this.enable()
   }
 
   async setOptions(patch: MergeOptionsPatch): Promise<void> {
@@ -202,6 +226,17 @@ export class MergeController {
 
   async setNetwork(id: string, enabled: boolean): Promise<void> {
     if (!validAdapterName(id)) throw new Error('Unknown network')
+    if (enabled) {
+      if (this.limited[id] !== undefined) {
+        this.limitHold.add(id)
+        const limited = { ...this.limited }
+        delete limited[id]
+        this.limited = limited
+        this.pushSoon(true)
+      }
+    } else {
+      this.limitHold.delete(id)
+    }
     const excluded = this.settings.excluded.filter((name) => name !== id)
     if (!enabled) excluded.push(id)
     await this.saveSettings({ ...this.settings, excluded })
@@ -229,6 +264,66 @@ export class MergeController {
       await client.request('cleanup')
     } catch (error) {
       throw new Error(error instanceof NetdError ? error.message : describe(error))
+    }
+  }
+
+  async syncLimitedNetworks(facts: Record<string, NetworkLimitFact>): Promise<void> {
+    if (this.shuttingDown) return
+    const previous = this.limited
+    const next: Record<string, LimitExcludeReason> = {}
+    for (const [id, fact] of Object.entries(facts)) {
+      if (!fact.excludeWhenLimited) {
+        this.limitHold.delete(id)
+        continue
+      }
+      if (this.limitHold.has(id) || !validAdapterName(id)) continue
+      const reason = limitExcludeReason(fact)
+      if (reason) next[id] = reason
+    }
+    this.limited = next
+    const names = new Set([...Object.keys(previous), ...Object.keys(next)])
+    const changed = [...names].some((id) => previous[id] !== next[id])
+    if (changed) this.pushSoon(true)
+    const client = this.session()
+    if (!client || !this.sessionReady) return
+    for (const name of names) {
+      if (this.shuttingDown || this.limitHold.has(name)) continue
+      const exclude = this.heldOut(name)
+      const was = this.settings.excluded.includes(name) || previous[name] !== undefined
+      if (exclude === was) continue
+      try {
+        await this.send(client, exclude ? 'exclude' : 'include', { adapter: name })
+      } catch (error) {
+        this.log(`${exclude ? 'exclude' : 'include'} ${name} failed: ${describe(error)}`)
+      }
+    }
+  }
+
+  private heldOut(name: string): boolean {
+    return this.settings.excluded.includes(name) || this.limited[name] !== undefined
+  }
+
+  private async exitNodeActive(): Promise<boolean> {
+    try {
+      const detection = await detectTailscaleExitNode(this.options.readTailscaleStatus)
+      return detection.active
+    } catch (error) {
+      this.log(`tailscale status failed: ${describe(error)}`)
+      return false
+    }
+  }
+
+  private async blockForExitNode(): Promise<void> {
+    this.exitNodeBlocked = true
+    this.commandFailure = null
+    if (this.settings.enabled) this.settings = { ...this.settings, enabled: false }
+    if (this.status === 'exit_node' && this.message === TAILSCALE_EXIT_NODE_MESSAGE)
+      this.pushSoon(true)
+    else this.setStatus('exit_node', TAILSCALE_EXIT_NODE_MESSAGE)
+    try {
+      await this.options.settings.save(this.settings)
+    } catch (error) {
+      this.log(`cannot save the merge settings: ${describe(error)}`)
     }
   }
 
@@ -506,6 +601,11 @@ export class MergeController {
     for (const name of settings.excluded) {
       if (present.has(name)) await this.apply(client, 'exclude', { adapter: name })
     }
+    for (const name of Object.keys(this.limited)) {
+      if (present.has(name) && !settings.excluded.includes(name)) {
+        await this.apply(client, 'exclude', { adapter: name })
+      }
+    }
     for (const [name, weight] of Object.entries(settings.weights)) {
       if (present.has(name)) await this.apply(client, 'set_weight', { adapter: name, weight })
     }
@@ -593,8 +693,11 @@ export class MergeController {
   private reapply(client: NetdClient, data: StatsData): void {
     for (const adapter of data.adapters) {
       if (!adapter.present) continue
-      if (!adapter.excluded && this.settings.excluded.includes(adapter.name)) {
+      const exclude = this.heldOut(adapter.name)
+      if (exclude && !adapter.excluded) {
         this.reapplyOnce(client, 'exclude', { adapter: adapter.name })
+      } else if (!exclude && adapter.excluded) {
+        this.reapplyOnce(client, 'include', { adapter: adapter.name })
       }
       const weight = this.settings.weights[adapter.name]
       if (weight !== undefined && adapter.weight_mode === 'auto' && !adapter.excluded) {
@@ -717,6 +820,10 @@ export class MergeController {
 
   private refreshStatus(): void {
     if (this.shuttingDown) return
+    if (this.exitNodeBlocked) {
+      this.setStatus('exit_node', TAILSCALE_EXIT_NODE_MESSAGE)
+      return
+    }
     const client = this.session()
     const info = this.helperState
     if (!client || !info) return
