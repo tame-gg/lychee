@@ -156,7 +156,7 @@ test('the shipped changelog has an entry for the current version @smoke', () => 
   )
   expect(run.status).toBe(0)
   expect(run.stdout).toMatch(/^- \*\*/m)
-  expect(run.stdout).not.toContain('administrator password')
+  expect(run.stdout).not.toContain('UAC approval')
 })
 
 test('a release that changes lychee-netd says the helper update asks once', () => {
