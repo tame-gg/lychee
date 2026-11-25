@@ -246,22 +246,35 @@ function place(outDir, arch, zip) {
   console.log(`fetch-wintun: wrote ${licensePath}`)
 }
 
+function windowsPowerShell() {
+  return join(
+    process.env.SystemRoot || 'C:\\Windows',
+    'System32',
+    'WindowsPowerShell',
+    'v1.0',
+    'powershell.exe'
+  )
+}
+
 function assertAuthenticode(dllPath) {
   if (process.platform !== 'win32') return
   const command = [
     "$ErrorActionPreference = 'Stop'",
+    "Import-Module (Join-Path $env:LYCHEE_PSHOME 'Modules\\Microsoft.PowerShell.Security')",
     '$sig = Get-AuthenticodeSignature -LiteralPath $env:WINTUN_DLL',
     'if ($sig.Status -ne \'Valid\') { throw "Authenticode status is $($sig.Status) for $env:WINTUN_DLL" }',
     '$subject = [string]$sig.SignerCertificate.Subject',
     "if ($subject -notlike '*WireGuard LLC*') { throw \"Authenticode signer is '$subject', expected WireGuard LLC\" }",
     'Write-Output $subject'
   ].join('\n')
+  const env = { ...process.env, WINTUN_DLL: dllPath, LYCHEE_PSHOME: dirname(windowsPowerShell()) }
+  delete env.PSModulePath
   const subject = execFileSync(
-    'powershell.exe',
+    windowsPowerShell(),
     ['-NoProfile', '-NonInteractive', '-Command', command],
     {
       encoding: 'utf8',
-      env: { ...process.env, WINTUN_DLL: dllPath },
+      env,
       windowsHide: true
     }
   ).trim()

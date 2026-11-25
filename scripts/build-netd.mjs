@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -53,6 +54,10 @@ for (const t of selected) {
       env: { ...process.env, CGO_ENABLED: '0', GOOS: t.goos, GOARCH: t.goarch }
     }
   )
+  if (t.goos === 'windows') {
+    const hash = createHash('sha256').update(readFileSync(outPath)).digest('hex')
+    writeFileSync(`${outPath}.sha256`, `${hash}\n`)
+  }
   if (t.dir === 'win-x64') {
     ensureWintun(outDir, requested !== null)
   }

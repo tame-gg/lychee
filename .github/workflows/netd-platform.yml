@@ -1,0 +1,86 @@
+name: netd platform
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'native/netd/**'
+      - 'src/main/network/**'
+      - 'scripts/*netd*'
+      - 'build/**'
+      - 'electron-builder.yml'
+      - '.github/workflows/netd-platform.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netd-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: windows-latest
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/netd/go.mod
+          cache-dependency-path: native/netd/go.sum
+
+      - name: Build lychee-netd.exe (CGO_ENABLED=0, -trimpath)
+        run: node scripts/build-netd.mjs --target win-x64
+        env:
+          CGO_ENABLED: '0'
+
+      - name: Test native/netd
+        working-directory: native/netd
+        run: go test ./...
+
+      - name: Install, elevate, and remove the helper
+        run: node --experimental-strip-types scripts/netd-windows-ci.mts
+
+  macos:
+    name: macos-latest
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: native/netd/go.mod
+          cache-dependency-path: native/netd/go.sum
+
+      - name: Require arm64
+        run: test "$(uname -m)" = "arm64"
+
+      - name: Build lychee-netd (CGO_ENABLED=0, -trimpath)
+        run: node scripts/build-netd.mjs --target mac-arm64
+        env:
+          CGO_ENABLED: '0'
+
+      - name: Loopback aliases for the engine tests
+        timeout-minutes: 2
+        run: |
+          sudo -n ifconfig lo0 alias 127.0.0.2/32
+          sudo -n ifconfig lo0 alias 127.0.0.3/32
+
+      - name: Test native/netd
+        working-directory: native/netd
+        run: go test ./...
+
+      - name: Launcher and elevation smoke
+        timeout-minutes: 3
+        run: node --experimental-strip-types scripts/netd-macos-ci.mts
