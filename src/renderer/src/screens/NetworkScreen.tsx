@@ -12,7 +12,7 @@ import { Switch } from '../components/ui/switch'
 import { useFormatSpeed } from '../hooks/useFormatSpeed'
 import { useNetworkVisuals } from '../hooks/useNetworkVisuals'
 import { mergeBackend, useAppStore } from '../store/useAppStore'
-import { mergeRows, mergeStatusView, type MergeTone } from '../utils/merge'
+import { lycheeBytesPerSec, mergeRows, mergeStatusView, type MergeTone } from '../utils/merge'
 
 const TONE_CLASS: Record<MergeTone, string> = {
   active: 'text-[var(--color-wifi-text)]',
@@ -53,17 +53,24 @@ function Option({
 export function NetworkScreen(): React.JSX.Element {
   const merging = useAppStore((store) => store.merging)
   const interfaces = useAppStore((store) => store.interfaces)
+  const preferences = useAppStore((store) => store.networkPreferences)
+  const downloads = useAppStore((store) => store.downloads)
   const setView = useAppStore((store) => store.setView)
   const setMerging = useAppStore((store) => store.setMerging)
   const setMergeOptions = useAppStore((store) => store.setMergeOptions)
   const setMergeNetwork = useAppStore((store) => store.setMergeNetwork)
   const setMergeWeight = useAppStore((store) => store.setMergeWeight)
+  const setNetworkPreference = useAppStore((store) => store.setNetworkPreference)
   const mergeError = useAppStore((store) => store.mergeError)
   const formatSpeed = useFormatSpeed()
   const networkVisual = useNetworkVisuals()
   const [repair, setRepair] = useState<{ busy: boolean; error: string | null }>({
     busy: false,
     error: null
+  })
+  const [diagnostics, setDiagnostics] = useState<{ busy: boolean; note: string | null }>({
+    busy: false,
+    note: null
   })
 
   useEffect(() => {
@@ -76,7 +83,8 @@ export function NetworkScreen(): React.JSX.Element {
   const status = mergeStatusView(merging)
   const running = merging.helper !== null && merging.totals !== null
   const merged = merging.status === 'on'
-  const rows = mergeRows(merging, interfaces)
+  const rows = mergeRows(merging, interfaces, preferences)
+  const lycheeSpeeds = lycheeBytesPerSec(downloads)
   const visuals = rows.map((row) => networkVisual(row.id, row.kind, row.osName))
   // The diagram and chart draw the connections the OS counts traffic on, combined or not.
   const present = rows
@@ -88,6 +96,22 @@ export function NetworkScreen(): React.JSX.Element {
     : ['—', undefined]
   const problem = status.tone === 'attention' || status.tone === 'error'
   const error = repair.error ?? mergeError
+
+  const exportDiagnostics = (): void => {
+    setDiagnostics({ busy: true, note: null })
+    void window.lychee
+      .exportDiagnostics()
+      .then((saved) => setDiagnostics({ busy: false, note: saved ? 'Diagnostics saved' : null }))
+      .catch((error: unknown) =>
+        setDiagnostics({
+          busy: false,
+          note: (error instanceof Error ? error.message : String(error)).replace(
+            /^Error invoking remote method '[^']+': (Error: )?/,
+            ''
+          )
+        })
+      )
+  }
 
   const runRepair = (): void => {
     setRepair({ busy: true, error: null })
@@ -216,8 +240,8 @@ export function NetworkScreen(): React.JSX.Element {
       )}
       {merging.status === 'off' && !merging.helper && (
         <p className="border-b-[0.5px] border-border px-5 py-2.5 text-[12px] leading-[1.4] text-muted-foreground">
-          Combining sends every app’s traffic over all of the connections below at once. Lychee’s
-          own downloads already use them without it.
+          Combining is off. It sends every app’s traffic over the connections below. Lychee’s own
+          downloads already use them without it.
         </p>
       )}
 
@@ -250,7 +274,21 @@ export function NetworkScreen(): React.JSX.Element {
               key={row.id}
               row={row}
               visual={visuals[index]}
-              onSwitch={(enabled) => setMergeNetwork(row.id, enabled)}
+              lycheeBytesPerSec={lycheeSpeeds.get(row.id) ?? 0}
+              onSwitch={(enabled) => {
+                if (
+                  enabled &&
+                  (row.limitReason || preferences[row.id]?.excludeFromMergeWhenLimited)
+                ) {
+                  setNetworkPreference(row.id, { excludeFromMergeWhenLimited: undefined })
+                }
+                setMergeNetwork(row.id, enabled)
+              }}
+              onExcludeWhenLimited={(on) =>
+                setNetworkPreference(row.id, {
+                  excludeFromMergeWhenLimited: on ? true : undefined
+                })
+              }
               onWeight={(weight) => setMergeWeight(row.id, weight)}
             />
           ))}
@@ -300,6 +338,45 @@ export function NetworkScreen(): React.JSX.Element {
             />
           </div>
         </section>
+
+        <section aria-label="About combining connections" className="px-5 pt-5">
+          <h2 className={sectionLabelClass}>About combining connections</h2>
+          <div className="mt-2 flex max-w-[640px] flex-col gap-2 text-[12px] leading-[1.45] text-muted-foreground">
+            <p>
+              Combining connections sends the internet traffic of every app on this computer across
+              the connections above, instead of leaving all of it on one. Lychee’s own downloads
+              already split a file across the connections you pick, and they do that with combining
+              switched off.
+            </p>
+            <p>
+              It stays off until you switch Combine connections on. Combining is for Mac and Linux
+              only. On Mac and the Linux AppImage, turning it on asks for an administrator password
+              each time; Linux deb and rpm installs need nothing extra. You can say no. Combining
+              stays off, and Lychee’s downloads are unchanged.
+            </p>
+            <p>
+              Switch Combine connections off to stop. If the network seems stuck afterwards, switch
+              combining off and use Repair network settings. That clears routes the helper added.
+            </p>
+            <p>
+              Each connection can see the traffic sent through it, including part of the DNS
+              lookups. A site can see more than one public address, because different connections
+              leave through different providers.
+            </p>
+            <p>
+              A data limit counts only what Lychee downloads. Other apps are not counted, so a phone
+              hotspot can still use a lot of data while combining is on. Mark that connection as
+              metered under Speed &amp; data limits, and turn on Leave out when metered or at its
+              data limit if it should drop out of combining once it is metered or the allowance is
+              used up. That choice is off until you turn it on.
+            </p>
+            <p>
+              If Tailscale is using an exit node, combining stays off and this page says so. An exit
+              node already sends traffic out through Tailscale, and combining would try to take the
+              same routes. Ordinary Tailscale use, without an exit node, is left alone.
+            </p>
+          </div>
+        </section>
       </div>
 
       <ScreenFooter className="justify-between">
@@ -308,15 +385,31 @@ export function NetworkScreen(): React.JSX.Element {
             ? `Network helper ${merging.helper.version} · ${merging.helper.os}/${merging.helper.arch}`
             : 'Network helper not running'}
         </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          disabled={(merging.helper !== null && merging.helperState !== 'off') || repair.busy}
-          onClick={runRepair}
-        >
-          {repair.busy ? 'Repairing…' : 'Repair network settings'}
-        </Button>
+        <span className="flex shrink-0 items-center gap-2">
+          {diagnostics.note && (
+            <span className="max-w-[220px] truncate font-mono text-[10.5px] text-muted-foreground">
+              {diagnostics.note}
+            </span>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={diagnostics.busy}
+            onClick={exportDiagnostics}
+          >
+            {diagnostics.busy ? 'Exporting…' : 'Export diagnostics'}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={(merging.helper !== null && merging.helperState !== 'off') || repair.busy}
+            onClick={runRepair}
+          >
+            {repair.busy ? 'Repairing…' : 'Repair network settings'}
+          </Button>
+        </span>
       </ScreenFooter>
     </div>
   )

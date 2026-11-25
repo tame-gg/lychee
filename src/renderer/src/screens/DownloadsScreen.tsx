@@ -616,7 +616,12 @@ const DownloadRow = memo(function DownloadRow({
                   </Tooltip>
                 )}
                 {speed && (
-                  <span className="font-mono text-[12.5px] font-medium tabular-nums">{speed}</span>
+                  <span className="font-mono text-[12.5px] font-medium tabular-nums">
+                    <span className="mr-1 font-sans text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                      Lychee
+                    </span>
+                    {speed}
+                  </span>
                 )}
               </div>
             )}

@@ -1,0 +1,32 @@
+{
+  "Version": "1.70.0",
+  "TUN": true,
+  "BackendState": "Running",
+  "Self": {
+    "ID": "nLycheeLaptop0000001",
+    "HostName": "lychee-laptop",
+    "DNSName": "lychee-laptop.example.ts.net.",
+    "OS": "linux",
+    "Online": true,
+    "ExitNode": false,
+    "ExitNodeOption": false,
+    "TailscaleIPs": ["100.64.10.2"]
+  },
+  "ExitNodeStatus": {
+    "ID": "nLycheeExit00000001",
+    "Online": true,
+    "TailscaleIPs": ["100.64.10.8"]
+  },
+  "Peer": {
+    "nodekey:0000000000000000000000000000000000000000000000000000000000000001": {
+      "ID": "nLycheeExit00000001",
+      "HostName": "lychee-exit",
+      "DNSName": "lychee-exit.example.ts.net.",
+      "OS": "linux",
+      "Online": true,
+      "ExitNode": true,
+      "ExitNodeOption": true,
+      "TailscaleIPs": ["100.64.10.8"]
+    }
+  }
+}

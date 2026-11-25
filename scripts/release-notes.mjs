@@ -30,6 +30,8 @@ if (!tag || !/^v\d/.test(tag)) {
 }
 
 const KIND = { new: 'New', faster: 'Faster', improved: 'Improved', fixed: 'Fixed' }
+const NETD_RELEASE_NOTE =
+  'On Mac and the Linux AppImage, turning it on asks for an administrator password each time; Linux deb and rpm installs need nothing extra.'
 const entry = changelog.find((candidate) => candidate.version === tag)
 if (!entry) {
   console.error(`No ${tag} entry in release/changelog.js — add one, then tag again.`)
@@ -37,7 +39,8 @@ if (!entry) {
 }
 const whatsNew =
   "## What's new\n\n" +
-  entry.items.map((item) => `- **${KIND[item.kind]}: ${item.title}.** ${item.text}`).join('\n')
+  entry.items.map((item) => `- **${KIND[item.kind]}: ${item.title}.** ${item.text}`).join('\n') +
+  (entry.netd ? `\n\n${NETD_RELEASE_NOTE}` : '')
 if (arg === '--changelog') {
   console.log(whatsNew)
   process.exit(0)

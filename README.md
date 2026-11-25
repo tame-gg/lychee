@@ -94,6 +94,20 @@ Lychee can only use a connection your operating system shows as a network adapte
 
 On Windows, install your phone maker's driver if the phone doesn't appear in Network Settings. An adapter appearing in Lychee doesn't guarantee it reaches the internet: VPN, virtual, and isolated adapters show up too. Check each network's latency and speed in Lychee.
 
+## Combine every app's connections
+
+Lychee's downloads already split one file across the connections you choose. That needs no administrator rights, and it is how Lychee works until you ask for more.
+
+**Combine connections**, on the Network page, is off until you turn it on. When it is on, Lychee runs a small network helper that sends the internet traffic of every app across those connections at once, not only Lychee's downloads. The Network page shows each connection's total speed, and a Lychee line for how much of that speed is Lychee's own downloads. Each connection can see the traffic that leaves through it, including some DNS lookups, and a website can see more than one public address.
+
+Combining is for Mac and Linux only. On Mac and the Linux AppImage, turning it on asks for an administrator password each time; Linux deb and rpm installs need nothing extra. You can say no. Combining stays off, and Lychee's own downloads keep working as before.
+
+Turn it off with the same switch. If the network seems stuck after that, turn combining off and click **Repair network settings** on the Network page. That removes routes the helper added.
+
+A data limit under Speed & data limits counts only what Lychee downloads. Other apps are not counted, so a phone hotspot can still use a lot of data while combining is on. On that network you can mark it as metered, and you can leave it out of combining once it is metered or its data limit is used up. Both of those choices are off until you turn them on.
+
+If Tailscale is using an exit node, Lychee will not turn combining on. An exit node already sends traffic out through Tailscale, and combining would try to take the same routes. Turn the exit node off in Tailscale, then switch combining on again. Ordinary Tailscale use, without an exit node, is left alone. The speeds on a download and in the networks menu are labelled Lychee so they are not confused with the totals on the Network page, which include every app.
+
 ## Manage your downloads
 
 The menu in the header filters the list to **All downloads**, **In progress**, **Finished**, or **Needs attention**. Click a download's name to see its progress in detail.
@@ -114,7 +128,7 @@ Open **Speed & data limits…** from the networks menu. Changes apply as you mak
 
 Under **All downloads**, set the total speed limit, the Slow mode speed, and how many downloads run at once. While Slow mode is on, its speed replaces the total limit, and per-network limits still apply.
 
-Choose a network to set its speed limit in KB/s or MB/s, and its data allowance in GB per **Day**, **Week**, or **Month**. The allowance counts what Lychee downloads on that network, torrents included; uploads and other apps don't count. Days reset at midnight, weeks on Monday, and months on the 1st, all in your local time, and usage is kept across restarts.
+Choose a network to set its speed limit in KB/s or MB/s, and its data allowance in GB per **Day**, **Week**, or **Month**. The allowance counts what Lychee downloads on that network, torrents included; uploads and other apps don't count. Days reset at midnight, weeks on Monday, and months on the 1st, all in your local time, and usage is kept across restarts. While Combine connections is on, other apps can still use that network and are not counted. On the same page you can mark the network as metered and leave it out of combining when it is metered or the allowance is used up.
 
 Two buttons manage a network's limits, and both ask you to confirm:
 
@@ -141,7 +155,7 @@ File ──→ Split ─────┼── Ethernet (10.0.0.12) ────�
                     └── USB tether (172.20.10.3) ──┘
 ```
 
-It needs no virtual adapter, VPN, kernel extension, or administrator rights.
+Lychee's own downloads need no virtual adapter, VPN, kernel extension, or administrator rights. Combining every app's traffic is a separate choice, off until you turn it on, and is described in [Combine every app's connections](#combine-every-apps-connections).
 
 ### Direct downloads use HTTP range requests
 
