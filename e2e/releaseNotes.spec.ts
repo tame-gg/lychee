@@ -182,9 +182,8 @@ test('a release that changes lychee-netd says when an administrator password is 
     encoding: 'utf8'
   })
   expect(notes.status, notes.stderr).toBe(0)
-  expect(notes.stdout).toContain('each time merging starts')
   expect(notes.stdout).toContain(
-    'macOS and the Linux AppImage ask for an administrator password each time merging starts; Linux deb installs need nothing extra.'
+    'On Mac and the Linux AppImage, turning it on asks for an administrator password each time; Linux deb and rpm installs need nothing extra.'
   )
   expect(notes.stdout).toContain('Network helper')
 })

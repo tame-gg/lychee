@@ -100,7 +100,7 @@ Lychee's downloads already split one file across the connections you choose. Tha
 
 **Combine connections**, on the Network page, is off until you turn it on. When it is on, Lychee runs a small network helper that sends the internet traffic of every app across those connections at once, not only Lychee's downloads. The Network page shows each connection's total speed, and a Lychee line for how much of that speed is Lychee's own downloads. Each connection can see the traffic that leaves through it, including some DNS lookups, and a website can see more than one public address.
 
-Combining is for Mac and Linux only. On a Mac and the Linux AppImage, turning it on the first time asks for an administrator password. Linux deb and rpm installs need nothing extra. You can say no. Combining stays off, and Lychee's own downloads keep working as before.
+Combining is for Mac and Linux only. On Mac and the Linux AppImage, turning it on asks for an administrator password each time; Linux deb and rpm installs need nothing extra. You can say no. Combining stays off, and Lychee's own downloads keep working as before.
 
 Turn it off with the same switch. If the network seems stuck after that, turn combining off and click **Repair network settings** on the Network page. That removes routes the helper added.
 
