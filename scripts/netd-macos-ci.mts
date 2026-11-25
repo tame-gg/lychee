@@ -25,14 +25,14 @@ function pass(message: string): void {
 }
 
 function proveExactRule(): void {
-  execFileSync('sudo', ['-n', 'dscl', '.', '-create', `/Users/${PROBE_USER}`])
+  sudo(['dscl', '.', '-create', `/Users/${PROBE_USER}`])
   for (const [key, value] of [
     ['UserShell', '/bin/bash'],
     ['UniqueID', '550'],
     ['PrimaryGroupID', '20'],
     ['NFSHomeDirectory', '/var/empty']
   ] as const) {
-    execFileSync('sudo', ['-n', 'dscl', '.', '-create', `/Users/${PROBE_USER}`, key, value])
+    sudo(['dscl', '.', '-create', `/Users/${PROBE_USER}`, key, value])
   }
   const probe = macSudoersContent(PROBE_USER)
   const dir = mkdtempSync(join(tmpdir(), 'lychee-sudoers-probe-'))
@@ -44,27 +44,29 @@ function proveExactRule(): void {
   const allowed = spawnSync(
     'sudo',
     ['-n', '-u', PROBE_USER, 'sudo', '-n', '-l', MAC_HELPER, ...MAC_LAUNCH_ARGS],
-    {
-      encoding: 'utf8'
-    }
+    { encoding: 'utf8', timeout: 20000 }
   )
   if (allowed.status !== 0) {
-    throw new Error(`an account with only this rule rejected the exact launch\n${allowed.stderr}`)
+    throw new Error(
+      `an account with only this rule rejected the exact launch\n${allowed.stdout ?? ''}\n${allowed.stderr ?? ''}`
+    )
   }
   const refusedVersion = spawnSync(
     'sudo',
     ['-n', '-u', PROBE_USER, 'sudo', '-n', '-l', MAC_HELPER, 'version'],
-    {
-      encoding: 'utf8'
-    }
+    { encoding: 'utf8', timeout: 20000 }
   )
-  if (refusedVersion.status === 0) throw new Error('the exact rule accepted version')
+  if (refusedVersion.status === 0) {
+    throw new Error(`the exact rule accepted version\n${refusedVersion.stdout ?? ''}`)
+  }
   const refusedPath = spawnSync(
     'sudo',
     ['-n', '-u', PROBE_USER, 'sudo', '-n', '-l', MAC_HELPER, 'serve', '--control', '/tmp/x.sock'],
-    { encoding: 'utf8' }
+    { encoding: 'utf8', timeout: 20000 }
   )
-  if (refusedPath.status === 0) throw new Error('the exact rule accepted a different control path')
+  if (refusedPath.status === 0) {
+    throw new Error(`the exact rule accepted a different control path\n${refusedPath.stdout ?? ''}`)
+  }
   pass('a user with only this rule is limited to the exact launch')
 }
 
@@ -72,6 +74,7 @@ function sudo(args: string[], input?: string): string {
   return execFileSync('sudo', ['-n', ...args], {
     encoding: 'utf8',
     input,
+    timeout: 20000,
     stdio: input === undefined ? 'inherit' : ['pipe', 'pipe', 'pipe']
   })
 }

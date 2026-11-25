@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join, win32 } from 'node:path'
 
-export const WINDOWS_TASK_NAME = 'lychee-netd'
+export const WINDOWS_TASK_NAME = '\\lychee-netd'
 export const WINDOWS_PIPE_PREFIX = '\\\\.\\pipe\\lychee-netd-'
 export const WINDOWS_WRITE_SIDS = ['S-1-5-18', 'S-1-5-32-544'] as const
 export const WINDOWS_OWNER_SIDS = ['S-1-5-18', 'S-1-5-32-544'] as const
@@ -234,7 +234,7 @@ if ((HashOf $exe) -ne $want) {
   [Console]::Error.WriteLine('installed helper hash mismatch')
   exit 11
 }
-& schtasks.exe /Create /TN $env:LYCHEE_NETD_TASK /XML $env:LYCHEE_NETD_TASK_XML /F
+& schtasks.exe /Create /TN "$env:LYCHEE_NETD_TASK" /XML "$env:LYCHEE_NETD_TASK_XML" /F
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 `.trim()
 }
@@ -428,7 +428,9 @@ try {
 export function endWindowsHelper(env: NodeJS.ProcessEnv, exe: string): void {
   const command = `
 $ErrorActionPreference = 'Continue'
-& schtasks.exe /End /TN ${psQuote(WINDOWS_TASK_NAME)} | Out-Null
+$tn = ${psQuote(WINDOWS_TASK_NAME)}
+$info = & schtasks.exe /Query /TN $tn /FO LIST | Out-String
+if ($info -match 'Status:\\s+Running') { & schtasks.exe /End /TN $tn | Out-Null }
 Get-CimInstance Win32_Process -Filter "Name = 'lychee-netd.exe'" | ForEach-Object {
   if ($_.ExecutablePath -eq ${psQuote(exe)}) {
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
@@ -488,8 +490,10 @@ export function removeWindowsHelper(programFiles: string, env: NodeJS.ProcessEnv
   const parent = win32.dirname(dest)
   const command = `
 $ErrorActionPreference = 'Continue'
-& schtasks.exe /End /TN ${psQuote(WINDOWS_TASK_NAME)} | Out-Null
-& schtasks.exe /Delete /TN ${psQuote(WINDOWS_TASK_NAME)} /F | Out-Null
+$tn = ${psQuote(WINDOWS_TASK_NAME)}
+$info = & schtasks.exe /Query /TN $tn /FO LIST | Out-String
+if ($info -match 'Status:\\s+Running') { & schtasks.exe /End /TN $tn | Out-Null }
+& schtasks.exe /Delete /TN $tn /F | Out-Null
 Get-CimInstance Win32_Process -Filter "Name = 'lychee-netd.exe'" | ForEach-Object {
   Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }

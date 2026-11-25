@@ -30,7 +30,6 @@ const source = join(root, 'build', 'netd', 'win-x64', 'lychee-netd.exe')
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version as string
 const account = 'lycheeci'
 const probeDir = join(process.env.PUBLIC ?? 'C:\\Users\\Public', 'lychee-netd-ci')
-const probeTask = 'lychee-netd-needs-admin'
 
 function pass(message: string): void {
   console.log(`PASS  ${message}`)
@@ -169,7 +168,6 @@ if (Test-Path -LiteralPath $env:LYCHEE_CI_RESULT) { Get-Content -LiteralPath $en
 function removeAccount(): void {
   ps(`
 $ErrorActionPreference = 'Continue'
-& schtasks.exe /Delete /TN ${probeTask} /F | Out-Null
 if (Get-LocalUser -Name '${account}' -ErrorAction SilentlyContinue) { Remove-LocalUser -Name '${account}' }
 `)
 }
@@ -295,13 +293,29 @@ async function main(): Promise<void> {
       throw new Error('a wrong hash replaced the installed helper')
     pass('a wrong hash does not replace the installed helper')
 
-    const task = queryWindowsTask(env)
-    if (!task.includes(installed)) throw new Error(`task does not run ${installed}\n${task}`)
-    if (!task.includes(`serve --control ${control}`))
-      throw new Error(`task arguments differ\n${task}`)
-    if (!/Highest Available/i.test(task)) throw new Error(`task is not Highest Available\n${task}`)
-    if (/LOCALAPPDATA/i.test(task)) throw new Error(`task points at a per-user path\n${task}`)
-    pass('scheduled task points only at the Program Files helper')
+    const taskBytes = execFileSync(
+      join(env.SystemRoot ?? 'C:\\Windows', 'System32', 'schtasks.exe'),
+      ['/Query', '/TN', '\\lychee-netd', '/XML'],
+      { windowsHide: true }
+    )
+    const taskXml = (
+      taskBytes[0] === 0xff && taskBytes[1] === 0xfe
+        ? taskBytes.subarray(2).toString('utf16le')
+        : taskBytes.includes(0)
+          ? taskBytes.toString('utf16le')
+          : taskBytes.toString('utf8')
+    ).replace(/^\uFEFF/, '')
+    if (!taskXml.includes('<RunLevel>HighestAvailable</RunLevel>')) {
+      throw new Error(`task \\lychee-netd is not HighestAvailable\n${taskXml}`)
+    }
+    if (!taskXml.includes(`<Command>${installed}</Command>`)) {
+      throw new Error(`task \\lychee-netd does not run ${installed}\n${taskXml}`)
+    }
+    if (!taskXml.includes(`<Arguments>serve --control ${control}</Arguments>`)) {
+      throw new Error(`task \\lychee-netd arguments differ\n${taskXml}`)
+    }
+    if (/LOCALAPPDATA/i.test(taskXml)) throw new Error(`task points at a per-user path\n${taskXml}`)
+    pass('scheduled task \\lychee-netd points only at the Program Files helper')
 
     const pid = startWindowsHelper(env, installed)
     pass(`scheduled task started lychee-netd (${pid})`)

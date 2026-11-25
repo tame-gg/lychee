@@ -72,13 +72,15 @@ jobs:
           CGO_ENABLED: '0'
 
       - name: Loopback aliases for the engine tests
+        timeout-minutes: 2
         run: |
-          sudo ifconfig lo0 alias 127.0.0.2/32
-          sudo ifconfig lo0 alias 127.0.0.3/32
+          sudo -n ifconfig lo0 alias 127.0.0.2/32
+          sudo -n ifconfig lo0 alias 127.0.0.3/32
 
       - name: Test native/netd
         working-directory: native/netd
         run: go test ./...
 
       - name: Launcher and elevation smoke
+        timeout-minutes: 3
         run: node --experimental-strip-types scripts/netd-macos-ci.mts
